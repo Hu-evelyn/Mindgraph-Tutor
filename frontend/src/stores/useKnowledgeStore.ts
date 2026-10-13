@@ -11,7 +11,7 @@ interface KnowledgeState extends AppState {
   // 动作
   createNewTree: (userPrompt: string, userId?: number) => Promise<number>;//建新树
   loadUserTrees: () => Promise<void>;//加载某用户所有树
-  loadTree: (treeId: number) => Promise<void>;//加载某树及其节点，存入currentTreeNodes中
+  loadTree: (treeId: number, force?: boolean) => Promise<void>;//加载某树及其节点，存入currentTreeNodes中
   expandNode: (nodeId: number, treeId: number) => Promise<void>;//拓展节点
   setFocusNode: (nodeId: number | null) => void;//当前节点
   setCurrentTree: (treeId: number | null) => void;//当前树
@@ -19,6 +19,9 @@ interface KnowledgeState extends AppState {
   deleteTree: (treeId: number) => Promise<{ success: boolean; deletedNodes: number }>;// 删除知识树
   
 }
+
+let treeLoadVersion = 0;
+let activeTreeLoad: { treeId: number; version: number; promise: Promise<void> } | null = null;
 
 export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   // 初始状态
@@ -57,12 +60,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       
       // 重新加载用户的知识树列表
       await get().loadUserTrees();
-      await get().loadTree(response.treeId);
-      
-      set({ 
-        currentTreeId: response.treeId,
-        isLoading: false 
-      });
+      // 只更新选择，树详情由 App 的选树监听加载一次。
+      get().setCurrentTree(response.treeId);
       
       return response.treeId;
     } catch (error) {
@@ -85,34 +84,38 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     }
   },
 
-  // 加载特定知识树
-  loadTree: async (treeId: number) => {
-    set({ isLoading: true });
-    
-    try {
-      const response = await knowledgeApi.getTree(treeId);
-      
-      console.log('加载树数据:', {
-      treeId,
-      nodesCount: response.nodes?.length,
-      nodes: response.nodes // 调试日志
-      });
-      // 这里需要处理节点数据，可以存储在状态中或使用缓存
-      set(state => ({
-        currentTreeId: treeId,
-        currentTreeNodes: (response.nodes || []).map(node => ({
-          ...node,
-          isExpanded: state.currentTreeId === treeId
-            ? state.currentTreeNodes.find(previous => previous.id === node.id)?.isExpanded
-            : undefined,
-        })),
-        isLoading: false,
-      }));
-    } catch (error) {
-      console.error('加载知识树失败:', error);
-      set({ isLoading: false });
-      throw error;
+  // 同一选择的重复调用共用请求；强制刷新用于节点扩展后的新数据。
+  loadTree: (treeId: number, force = false) => {
+    if (get().currentTreeId !== treeId) return Promise.resolve();
+    if (!force && activeTreeLoad?.treeId === treeId && activeTreeLoad.version === treeLoadVersion) {
+      return activeTreeLoad.promise;
     }
+
+    const version = ++treeLoadVersion;
+    set({ isLoading: true });
+    const promise = knowledgeApi.getTree(treeId)
+      .then(response => {
+        // 只允许最新且仍被选中的树更新状态，防止慢请求覆盖新选择。
+        if (version !== treeLoadVersion || get().currentTreeId !== treeId) return;
+        if (!response.tree) throw new Error('知识树不存在');
+        set(state => ({
+          currentTreeNodes: response.nodes.map(node => ({
+            ...node,
+            isExpanded: state.currentTreeNodes.find(previous => previous.id === node.id)?.isExpanded,
+          })),
+          isLoading: false,
+        }));
+      })
+      .catch(error => {
+        if (version !== treeLoadVersion || get().currentTreeId !== treeId) return;
+        set({ isLoading: false });
+        throw error;
+      })
+      .finally(() => {
+        if (activeTreeLoad?.version === version) activeTreeLoad = null;
+      });
+    activeTreeLoad = { treeId, version, promise };
+    return promise;
   },
 
   // 扩展节点
@@ -126,9 +129,11 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       if (!node) throw new Error('节点不存在');
 
       await knowledgeApi.expandNode(nodeId, treeId);
-      await get().loadTree(treeId);
+      if (get().currentTreeId !== treeId) return;
+      await get().loadTree(treeId, true);
 
-      set(state => ({
+      // 扩展期间若切到了别的树，不再改写新树的展开状态或焦点。
+      set(state => state.currentTreeId !== treeId ? state : ({
         currentTreeNodes: state.currentTreeNodes.map(n => 
           n.id === nodeId ? { 
             ...n, 
@@ -141,7 +146,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       
     } catch (error) {
       console.error('扩展节点失败:', error);
-      set({ isLoading: false });
+      if (get().currentTreeId === treeId) set({ isLoading: false });
       throw error;
     }
   },
@@ -161,9 +166,15 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
 
   // 设置当前知识树
   setCurrentTree: (treeId: number | null) => {
-    set({ 
+    if (get().currentTreeId === treeId) return;
+    // 切换时使旧响应失效，并清除上一棵树的节点与焦点。
+    treeLoadVersion++;
+    activeTreeLoad = null;
+    set({
       currentTreeId: treeId,
       currentFocusNodeId: null,
+      currentTreeNodes: [],
+      isLoading: treeId !== null,
     });
   },
 
@@ -174,19 +185,12 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     try {
       const response = await knowledgeApi.deleteTree(treeId);
       
-      // 更新状态
-      set(state => {
-        const newTrees = state.trees.filter(tree => tree.id !== treeId);
-        const isDeletingCurrentTree = state.currentTreeId === treeId;
-        
-        return {
-          trees: newTrees,
-          currentTreeId: isDeletingCurrentTree ? (newTrees[0]?.id || null) : state.currentTreeId,
-          currentFocusNodeId: isDeletingCurrentTree ? null : state.currentFocusNodeId,
-          currentTreeNodes: isDeletingCurrentTree ? [] : state.currentTreeNodes,
-          isLoading: false
-        };
-      });
+      const wasCurrentTree = get().currentTreeId === treeId;
+      set(state => ({
+        trees: state.trees.filter(tree => tree.id !== treeId),
+        isLoading: false,
+      }));
+      if (wasCurrentTree) get().setCurrentTree(get().trees[0]?.id ?? null);
       
       return { success: true, deletedNodes: response.deletedNodes || 0 };
       

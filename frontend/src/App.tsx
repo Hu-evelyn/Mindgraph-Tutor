@@ -20,7 +20,7 @@ function App() {
     loadUserTrees();
   }, [loadUserTrees]);
 
-  // 如果有当前选中的知识树，确保加载树数据
+  // 选树后只从这里触发加载；创建和删除只更新当前树 ID。
   useEffect(() => {
     if (currentTreeId) {
       loadTree(currentTreeId).catch(error => console.error('加载知识树失败:', error));

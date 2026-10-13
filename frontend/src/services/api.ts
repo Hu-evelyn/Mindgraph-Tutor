@@ -1,5 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
-import type { KnowledgeTree, DbKnowledgeNode} from '../types/index';
+import type { KnowledgeTree, KnowledgeTreeResponse } from '../types/index';
 // 通用请求函数
 async function apiRequest<T = any>(
   endpoint: string,
@@ -80,11 +80,7 @@ export const knowledgeApi = {
 
   // 获取特定知识树的完整结构
   getTree: (treeId: number) =>
-    apiRequest<{
-      tree: KnowledgeTree;
-      nodes: DbKnowledgeNode[];
-      totalNodes: number;
-    }>(`/tree/${treeId}`),
+    apiRequest<KnowledgeTreeResponse>(`/tree/${treeId}`),
 
   // 删除知识树（包含所有节点）
   deleteTree: (treeId: number) =>

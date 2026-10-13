@@ -67,6 +67,13 @@ export interface KnowledgeTree {
   node_count?: number; // 扩展字段，节点数量
 }
 
+// 树详情接口返回扁平节点；两种视图统一由 buildTreeStructure 转换。
+export interface KnowledgeTreeResponse {
+  tree: KnowledgeTree | null;
+  nodes: DbKnowledgeNode[];
+  totalNodes: number;
+}
+
 
 
 // 应用状态
