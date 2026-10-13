@@ -120,12 +120,12 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     set({ isLoading: true });
     
     try {
-        // 需要先获取节点标签
+      // 先确认当前树中有此节点；后端仍会独立校验节点归属。
       const nodes = get().currentTreeNodes;
       const node = nodes.find(n => n.id === nodeId);
       if (!node) throw new Error('节点不存在');
 
-      await knowledgeApi.expandNode(nodeId, node.label, treeId);
+      await knowledgeApi.expandNode(nodeId, treeId);
       await get().loadTree(treeId);
 
       set(state => ({

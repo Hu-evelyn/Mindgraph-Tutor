@@ -54,8 +54,8 @@ export const knowledgeApi = {
       body: { userPrompt, userId } as any,
     }),
 
-  // 扩展节点
-  expandNode: (nodeId: number, nodeLabel: string, treeId: number) =>
+  // 只提交节点和树的 ID；标签由后端从数据库读取并校验归属。
+  expandNode: (nodeId: number, treeId: number) =>
     apiRequest<{
       success: boolean;
       content: string;
@@ -71,7 +71,7 @@ export const knowledgeApi = {
       }>;
     }>('/expand-node', {
       method: 'POST',
-      body: { nodeId, nodeLabel, treeId } as any,
+      body: { nodeId, treeId } as any,
     }),
 
   // 获取用户的知识树列表

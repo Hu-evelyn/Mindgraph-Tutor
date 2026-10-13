@@ -15,10 +15,22 @@ let baseUrl;
 let tempDir;
 let modelCalls = 0;
 let modelMode = 'valid';
+let createMode = 'valid';
+const modelRequests = [];
 
 const mockAnswer = () => modelMode === 'empty'
-  ? { content: 'Expanded without children', children: [] }
-  : { content: 'Expanded content', children: [{ label: 'Generated child', description: 'Details' }] };
+  ? { content: 'Expanded without children', terminal: true, reason: 'No smaller topic', children: [] }
+  : { content: 'Expanded content', terminal: false,
+      children: [{ label: 'Generated child', description: 'Details', relation: 'RELATED' }] };
+
+const createAnswer = () => ({
+  core_concept: 'Test Topic',
+  description: 'Overview',
+  children: [
+    { label: 'Root child 1', description: 'First topic', relation: 'PART_OF' },
+    { label: 'Root child 2', description: 'Second topic', relation: 'PART_OF' },
+  ],
+});
 
 function run(sql, params = []) {
   return new Promise((resolve, reject) => {
@@ -52,13 +64,65 @@ async function expand(nodeId, treeId) {
   return { status: response.status, body: await response.json() };
 }
 
+async function createTree() {
+  const response = await fetch(`${baseUrl}/api/generate-tree`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userPrompt: 'Learn test topic', userId: 1 }),
+  });
+  return { status: response.status, body: await response.json() };
+}
+
+async function deleteTree(treeId) {
+  const response = await fetch(`${baseUrl}/api/tree/${treeId}`, { method: 'DELETE' });
+  return { status: response.status, body: await response.json() };
+}
+
+async function count(table) {
+  const [row] = await all(`SELECT COUNT(*) AS total FROM ${table}`);
+  return row.total;
+}
+
 before(async () => {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mindgraph-expand-'));
+  // 按提示词和模式模拟模型响应，覆盖格式错误、字段错误及有限重试。
   modelServer = http.createServer((request, response) => {
     modelCalls++;
-    request.resume();
+    let body = '';
+    request.on('data', chunk => { body += chunk; });
     request.on('end', () => {
-      const content = modelMode === 'invalid' ? 'not JSON' : JSON.stringify(mockAnswer());
+      const payload = JSON.parse(body);
+      modelRequests.push(payload);
+      const prompt = payload.messages.find(message => message.role === 'user')?.content || '';
+      let content;
+      if (prompt.includes('提取学习主题')) content = 'Test Topic';
+      else if (prompt.includes('请评估主题')) content = 'medium';
+      else if (prompt.includes('写一个详细介绍')) content = 'Root introduction';
+      else if (prompt.includes('core_concept')) {
+        if (createMode === 'invalid') content = 'not JSON';
+        else if (createMode === 'too-many') content = JSON.stringify({
+          ...createAnswer(),
+          children: Array.from({ length: 7 }, (_, index) => ({
+            label: `Root ${index}`, description: 'Details', relation: 'PART_OF',
+          })),
+        });
+        else content = JSON.stringify(createAnswer());
+      } else if (modelMode === 'invalid') content = 'not JSON';
+      else if (modelMode === 'invalid-once') {
+        content = 'not JSON';
+        modelMode = 'valid';
+      } else if (modelMode === 'missing-children') content = JSON.stringify({ content: 'Details' });
+      else if (modelMode === 'empty-unmarked') content = JSON.stringify({ content: 'Details', children: [] });
+      else if (modelMode === 'blank-label') content = JSON.stringify({
+        ...mockAnswer(), children: [{ label: ' ', description: 'Details', relation: 'RELATED' }],
+      });
+      else if (modelMode === 'bad-relation') {
+        content = JSON.stringify({ ...mockAnswer(), children: [{ label: 'Bad child', description: 'Details', relation: 'UNKNOWN' }] });
+      } else if (modelMode === 'too-many') {
+        content = JSON.stringify({ ...mockAnswer(), children: Array.from({ length: 6 }, (_, index) => ({
+          label: `Child ${index}`, description: 'Details', relation: 'RELATED',
+        })) });
+      } else content = JSON.stringify(mockAnswer());
       response.writeHead(200, { 'Content-Type': 'application/json' });
       response.end(JSON.stringify({
         id: 'mock', object: 'chat.completion',
@@ -148,7 +212,7 @@ test('invalid model output leaves node retryable', async () => {
   const { nodeId, treeId } = await newNode();
   modelMode = 'invalid';
   const failed = await expand(nodeId, treeId);
-  assert.equal(failed.status, 500);
+  assert.equal(failed.status, 502);
   const [node] = await all('SELECT * FROM knowledge_nodes WHERE id = ?', [nodeId]);
   assert.equal(node.children_generated, 0);
   assert.equal(node.content, 'Original content');
@@ -179,4 +243,115 @@ test('failed child insert rolls back content and generated flag', async () => {
   assert.equal((await all('SELECT * FROM knowledge_nodes WHERE parent_id = ?', [nodeId])).length, 0);
   await run('DROP TRIGGER block_child');
   assert.equal((await expand(nodeId, treeId)).status, 200);
+});
+
+test('structured calls use JSON mode and ignore a forged node label', async () => {
+  modelMode = 'valid';
+  const { nodeId, treeId } = await newNode();
+  const beforeRequests = modelRequests.length;
+  assert.equal((await expand(nodeId, treeId)).status, 200);
+  const request = modelRequests[beforeRequests];
+  assert.deepEqual(request.response_format, { type: 'json_object' });
+  assert.equal(request.max_tokens, 4096);
+  const prompt = request.messages.find(message => message.role === 'user').content;
+  assert.match(prompt, /Parent/);
+  assert.doesNotMatch(prompt, /Untrusted label/);
+});
+
+test('invalid structure, relation, count and unmarked empty list never write', async t => {
+  t.after(() => { modelMode = 'valid'; });
+  for (const mode of ['missing-children', 'blank-label', 'bad-relation', 'too-many', 'empty-unmarked']) {
+    modelMode = mode;
+    const { nodeId, treeId } = await newNode();
+    const beforeCalls = modelCalls;
+    const result = await expand(nodeId, treeId);
+    assert.equal(result.status, 502, mode);
+    assert.equal(modelCalls, beforeCalls + 2, mode);
+    const [node] = await all('SELECT * FROM knowledge_nodes WHERE id = ?', [nodeId]);
+    assert.equal(node.children_generated, 0, mode);
+    assert.equal(node.content, 'Original content', mode);
+    assert.equal((await all('SELECT * FROM knowledge_nodes WHERE parent_id = ?', [nodeId])).length, 0, mode);
+  }
+});
+
+test('one invalid JSON response is retried once and then succeeds', async () => {
+  modelMode = 'invalid-once';
+  const { nodeId, treeId } = await newNode();
+  const beforeCalls = modelCalls;
+  const result = await expand(nodeId, treeId);
+  assert.equal(result.status, 200);
+  assert.equal(modelCalls, beforeCalls + 2);
+});
+
+test('creating a tree stores root and validated children together', async () => {
+  createMode = 'valid';
+  const beforeTrees = await count('knowledge_trees');
+  const beforeNodes = await count('knowledge_nodes');
+  const result = await createTree();
+  assert.equal(result.status, 200);
+  assert.equal(result.body.nodes.length, 2);
+  assert.equal(await count('knowledge_trees'), beforeTrees + 1);
+  assert.equal(await count('knowledge_nodes'), beforeNodes + 3);
+  const [root] = await all('SELECT * FROM knowledge_nodes WHERE id = ?', [result.body.rootNode.id]);
+  assert.equal(root.children_generated, 1);
+  const request = modelRequests.findLast(payload => payload.messages.some(message =>
+    message.role === 'user' && message.content.includes('core_concept')));
+  assert.deepEqual(request.response_format, { type: 'json_object' });
+});
+
+test('invalid tree outline fails without creating any rows', async t => {
+  t.after(() => { createMode = 'valid'; });
+  for (const mode of ['invalid', 'too-many']) {
+    createMode = mode;
+    const beforeTrees = await count('knowledge_trees');
+    const beforeNodes = await count('knowledge_nodes');
+    const result = await createTree();
+    assert.equal(result.status, 502, mode);
+    assert.equal(await count('knowledge_trees'), beforeTrees, mode);
+    assert.equal(await count('knowledge_nodes'), beforeNodes, mode);
+  }
+});
+
+test('failure inserting the second child rolls back the entire new tree', async () => {
+  // 在第二个子节点插入时制造数据库错误，确认先前写入也被回滚。
+  await run(`CREATE TRIGGER block_second_tree_child BEFORE INSERT ON knowledge_nodes
+    WHEN NEW.label = 'Root child 2' BEGIN SELECT RAISE(FAIL, 'blocked'); END`);
+  const beforeTrees = await count('knowledge_trees');
+  const beforeNodes = await count('knowledge_nodes');
+  const result = await createTree();
+  assert.equal(result.status, 500);
+  assert.equal(await count('knowledge_trees'), beforeTrees);
+  assert.equal(await count('knowledge_nodes'), beforeNodes);
+  await run('DROP TRIGGER block_second_tree_child');
+});
+
+test('failed tree deletion restores its nodes, then can be retried', async () => {
+  const created = await createTree();
+  assert.equal(created.status, 200);
+  const treeId = created.body.treeId;
+  // 在删除树本体时制造错误，确认已删节点会随事务恢复。
+  await run(`CREATE TRIGGER block_tree_delete BEFORE DELETE ON knowledge_trees
+    WHEN OLD.id = ${treeId} BEGIN SELECT RAISE(FAIL, 'blocked'); END`);
+  const failed = await deleteTree(treeId);
+  assert.equal(failed.status, 500);
+  assert.equal((await all('SELECT * FROM knowledge_trees WHERE id = ?', [treeId])).length, 1);
+  assert.equal((await all('SELECT * FROM knowledge_nodes WHERE tree_id = ?', [treeId])).length, 3);
+  await run('DROP TRIGGER block_tree_delete');
+
+  const deleted = await deleteTree(treeId);
+  assert.equal(deleted.status, 200);
+  assert.equal(deleted.body.deletedNodes, 3);
+  assert.equal((await all('SELECT * FROM knowledge_trees WHERE id = ?', [treeId])).length, 0);
+  assert.equal((await all('SELECT * FROM knowledge_nodes WHERE tree_id = ?', [treeId])).length, 0);
+});
+
+test('invalid IDs and cross-tree expansion are rejected before model calls', async () => {
+  const beforeCalls = modelCalls;
+  const invalid = await fetch(`${baseUrl}/api/expand-node`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nodeId: '1', treeId: 1 }),
+  });
+  assert.equal(invalid.status, 400);
+  assert.equal((await deleteTree('invalid')).status, 400);
+  assert.equal(modelCalls, beforeCalls);
 });
