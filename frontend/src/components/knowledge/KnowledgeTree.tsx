@@ -1,7 +1,7 @@
-import { useEffect,useState } from 'react';
+import { useState } from 'react';
 import { useKnowledgeStore } from '../../stores/useKnowledgeStore';
 import { TreeNode } from './TreeNode';
-import type { TreeKnowledgeNode,DbKnowledgeNode } from '../../types';
+import type { TreeKnowledgeNode } from '../../types';
 import { buildTreeStructure } from '../../utils/knowledgeTreeUtils'; // 导入共享函数
 
 // 修改组件接口
@@ -16,7 +16,6 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
     currentFocusNodeId, 
     setFocusNode, 
     expandNode, 
-    loadTree,
     getCurrentTreeNodes,
     currentTree,
     toggleNodeExpansion
@@ -26,13 +25,7 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
   // 1.获取状态
   const treeNodes = getCurrentTreeNodes();
   const tree = currentTree();
-
-  useEffect(() => {
-    //2.有树则加载树
-    if (currentTreeId) {
-      loadTree(currentTreeId);
-    }
-  }, [currentTreeId, loadTree]);
+  const [expansionError, setExpansionError] = useState<string | null>(null);
   //没则加载页面
   if (!currentTreeId || !tree) {
     return (
@@ -59,17 +52,17 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
 
   // 添加专门的展开/收缩处理函数
   const handleToggleExpand = async (node: TreeKnowledgeNode) => {
-    // 切换展开状态
-    toggleNodeExpansion(node.id);
-    
-    // 如果节点没有子节点，且要展开，则生成子节点
-    if (!node.isExpanded && (!node.children || node.children.length === 0)) {
-      try {
-        await expandNode(node.id, currentTreeId);
-        await loadTree(currentTreeId); // 重新加载树数据
-      } catch (error) {
-        console.error('扩展节点失败:', error);
-      }
+    if (node.children.length > 0) {
+      toggleNodeExpansion(node.id);
+      return;
+    }
+    if (node.childrenGenerated) return;
+
+    setExpansionError(null);
+    try {
+      await expandNode(node.id, currentTreeId);
+    } catch (error) {
+      setExpansionError(error instanceof Error ? error.message : '扩展失败，请重试');
     }
   };
 
@@ -85,6 +78,11 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
         </div>
 
         {/* 树状图容器 */}
+        {expansionError && (
+          <div role="alert" className="mb-3 text-sm text-red-700">
+            扩展失败：{expansionError}。请再次点击节点箭头重试。
+          </div>
+        )}
         <div className="relative max-h-[70vh] overflow-y-auto border border-gray-200 rounded-lg p-4 bg-white">
           {structuredNodes.map((rootNode, index) => (
           <TreeNode

@@ -98,14 +98,20 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       nodes: response.nodes // 调试日志
       });
       // 这里需要处理节点数据，可以存储在状态中或使用缓存
-      set({ 
+      set(state => ({
         currentTreeId: treeId,
-        currentTreeNodes: response.nodes|| [], // 存储节点数据
-        isLoading: false 
-      });
+        currentTreeNodes: (response.nodes || []).map(node => ({
+          ...node,
+          isExpanded: state.currentTreeId === treeId
+            ? state.currentTreeNodes.find(previous => previous.id === node.id)?.isExpanded
+            : undefined,
+        })),
+        isLoading: false,
+      }));
     } catch (error) {
       console.error('加载知识树失败:', error);
       set({ isLoading: false });
+      throw error;
     }
   },
 
@@ -119,17 +125,14 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       const node = nodes.find(n => n.id === nodeId);
       if (!node) throw new Error('节点不存在');
 
-      const response = await knowledgeApi.expandNode(nodeId, node.label, treeId);
-      
-      // 重新加载树数据以获取更新后的节点
-      // 一次性更新所有状态
+      await knowledgeApi.expandNode(nodeId, node.label, treeId);
+      await get().loadTree(treeId);
+
       set(state => ({
         currentTreeNodes: state.currentTreeNodes.map(n => 
           n.id === nodeId ? { 
             ...n, 
             isExpanded: true,
-            content:response.content,
-            children:[]
           } : n
         ),
         currentFocusNodeId: nodeId,
@@ -139,13 +142,14 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     } catch (error) {
       console.error('扩展节点失败:', error);
       set({ isLoading: false });
+      throw error;
     }
   },
 
   toggleNodeExpansion: (nodeId: number) => {
   set(state => ({
     currentTreeNodes: state.currentTreeNodes.map(n =>
-      n.id === nodeId ? { ...n, isExpanded: !n.isExpanded } : n
+      n.id === nodeId ? { ...n, isExpanded: !(n.isExpanded ?? true) } : n
     ),
   }));
   },

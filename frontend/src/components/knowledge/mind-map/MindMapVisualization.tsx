@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useKnowledgeStore } from '../../../stores/useKnowledgeStore';
-import type { TreeKnowledgeNode, DbKnowledgeNode } from '../../../types';
+import type { TreeKnowledgeNode } from '../../../types';
+import { buildTreeStructure } from '../../../utils/knowledgeTreeUtils';
 import { ContextMenu } from '../ContextMenu';
 import './MindMapVisualization.css';
 
@@ -23,6 +24,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{x: number; y: number; node: TreeKnowledgeNode} | null>(null);
+  const [expansionError, setExpansionError] = useState<{nodeId: number; treeId: number; message: string} | null>(null);
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 1000, height: 600 });
   const [isDragging, setIsDragging] = useState(false);
   const [startPan, setStartPan] = useState({ x: 0, y: 0 });
@@ -40,46 +42,6 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
 
   const treeNodes = getCurrentTreeNodes();
   const tree = currentTree();
-
-  // 构建树形结构
-  const buildTreeStructure = (nodes: DbKnowledgeNode[]): TreeKnowledgeNode[] => {
-    const nodeMap = new Map<number, TreeKnowledgeNode>();
-    const rootNodes: TreeKnowledgeNode[] = [];
-
-    nodes.forEach(node => {
-      const treeNode: TreeKnowledgeNode = {
-        id: node.id,
-        title: node.label,
-        description: node.content ? node.content.substring(0, 100) + '...' : '',
-        content: node.content,
-        children: [],
-        isExpanded: node.isExpanded ?? true,
-        isLoading: false,
-        // 添加所有样式相关属性
-        is_core: node.is_core || false,
-        is_boundary: node.is_boundary || false,
-        importance: node.importance || 'medium',
-        relation_type: node.relation_type || 'PART_OF',
-        difficulty: node.difficulty || 'medium',
-        
-      };
-      nodeMap.set(node.id, treeNode);
-    });
-
-    nodes.forEach(node => {
-      const treeNode = nodeMap.get(node.id)!;
-      if (node.parent_id === null) {
-        rootNodes.push(treeNode);
-      } else {
-        const parent = nodeMap.get(node.parent_id);
-        if (parent) {
-          parent.children.push(treeNode);
-        }
-      }
-    });
-
-    return rootNodes;
-  };
 
   // 自动调整思维导图大小以适应内容
   const calculateOptimalViewBox = (layout: NodeLayout[]) => {
@@ -453,15 +415,24 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     drawNodes(svg, layout);
   };
 
-  const handleExpandNode = async () => {
+  const expandSelectedNode = async (nodeId: number, treeId: number) => {
+    setExpansionError(null);
+    try {
+      await expandNode(nodeId, treeId);
+      const refreshedNodes = useKnowledgeStore.getState().currentTreeNodes;
+      setViewBox(calculateOptimalViewBox(calculateLayout(buildTreeStructure(refreshedNodes))));
+    } catch (error) {
+      setExpansionError({
+        nodeId,
+        treeId,
+        message: error instanceof Error ? error.message : '扩展失败，请重试',
+      });
+    }
+  };
+
+  const handleExpandNode = () => {
     if (contextMenu && currentTreeId) {
-      try {
-        console.log('开始扩展节点:', contextMenu.node.title, 'ID:', contextMenu.node.id);
-        await expandNode(contextMenu.node.id, currentTreeId);
-      } catch (error) {
-        console.error('扩展节点失败:', error);
-        alert('扩展节点失败: ' + (error instanceof Error ? error.message : '未知错误'));
-      }
+      void expandSelectedNode(contextMenu.node.id, currentTreeId);
     }
     setContextMenu(null);
   };
@@ -547,6 +518,18 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
           </div>
         </div>
       </div>
+      {expansionError && expansionError.treeId === currentTreeId && (
+        <div role="alert" className="flex items-center gap-2 mt-2 text-sm text-red-700">
+          <span>扩展失败：{expansionError.message}</span>
+          <button
+            type="button"
+            className="underline"
+            onClick={() => void expandSelectedNode(expansionError.nodeId, expansionError.treeId)}
+          >
+            重试
+          </button>
+        </div>
+      )}
     </div>
 
     

@@ -23,7 +23,7 @@ function App() {
   // 如果有当前选中的知识树，确保加载树数据
   useEffect(() => {
     if (currentTreeId) {
-      loadTree(currentTreeId);
+      loadTree(currentTreeId).catch(error => console.error('加载知识树失败:', error));
     }
   }, [currentTreeId, loadTree]);
 

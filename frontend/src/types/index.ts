@@ -24,6 +24,7 @@ export interface DbKnowledgeNode {
   label: string;
   content: string;
   is_learned: boolean;
+  children_generated?: number;
   relation_type?: string;      
   importance?: string;          
   difficulty?: string;          
@@ -52,6 +53,7 @@ export interface TreeKnowledgeNode {
   is_boundary?: boolean;        
   is_core?: boolean;           
   children: TreeKnowledgeNode[];
+  childrenGenerated: boolean;
   isExpanded: boolean;
   isLoading?: boolean;
 }

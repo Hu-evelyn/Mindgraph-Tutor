@@ -27,6 +27,7 @@ export const buildTreeStructure = (nodes: DbKnowledgeNode[]): TreeKnowledgeNode[
       is_boundary: node.is_boundary,            // 新增
       is_core: node.is_core,                    // 新增
       children: [],
+      childrenGenerated: Boolean(node.children_generated),
       isExpanded: node.isExpanded ?? true, // 默认展开
       isLoading: true,
     };

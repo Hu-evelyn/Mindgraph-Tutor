@@ -21,7 +21,8 @@ async function apiRequest<T = any>(
   const response = await fetch(url, config);
   
   if (!response.ok) {
-    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    const details = await response.json().catch(() => null);
+    throw new Error(details?.error || `API Error: ${response.status} ${response.statusText}`);
   }
 
   return response.json();

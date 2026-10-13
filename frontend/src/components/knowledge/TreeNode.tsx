@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { AcademicCapIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
+import React from 'react';
+import { AcademicCapIcon, DocumentTextIcon, ChevronDownIcon, ChevronRightIcon, PlusIcon } from '@heroicons/react/24/outline';
 import type { TreeKnowledgeNode } from '../../types';
 
 
@@ -18,8 +18,6 @@ interface TreeNodeProps {
 export const TreeNode: React.FC<TreeNodeProps> = ({
   node,
   depth,
-  index,
-  totalSiblings,
   currentFocusNodeId,
   onNodeClick, //左键
   onToggleExpand, // 接收展开/收缩回调
@@ -89,22 +87,29 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
       >
         {/* 展开 / 收起图标 */}
         {hasChildren && (
-          <span
+          <button
+            type="button"
+            title={isExpanded ? '收起子节点' : '展开子节点'}
+            aria-label={isExpanded ? '收起子节点' : '展开子节点'}
             onClick={handleToggle}
-            className="text-xs text-gray-500 cursor-pointer"
+            className="w-6 h-6 flex items-center justify-center text-gray-500"
           >
-            {isExpanded ? '▼' : '▶'}
-          </span>
+            {isExpanded ? <ChevronDownIcon className="w-4 h-4" /> : <ChevronRightIcon className="w-4 h-4" />}
+          </button>
         )}
         {/* 对于没有子节点但可以展开的节点 */}
-        {!hasChildren && (
-          <span
+        {!hasChildren && !node.childrenGenerated && (
+          <button
+            type="button"
+            title="生成子节点"
+            aria-label="生成子节点"
             onClick={handleToggle}
-            className="text-xs text-gray-300 cursor-pointer hover:bg-gray-200 p-1 rounded"
+            className="w-6 h-6 flex items-center justify-center text-gray-400 hover:bg-gray-200 rounded"
           >
-            ▶
-          </span>
+            <PlusIcon className="w-4 h-4" />
+          </button>
         )}
+        {!hasChildren && node.childrenGenerated && <span aria-hidden="true" className="w-6 h-6" />}
 
         {/* 节点图标 */}
         {getNodeIcon()}

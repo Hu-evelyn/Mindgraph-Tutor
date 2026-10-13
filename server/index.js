@@ -9,7 +9,7 @@ const port = process.env.PORT || 3000;
 
 // 初始化 OpenAI 客户端 (配置DeepSeek)
 const client = new OpenAI({
-  baseURL: "https://api.deepseek.com",
+  baseURL: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
   apiKey: process.env.DEEPSEEK_API_KEY,
   defaultHeaders: { "X-Failover-Enabled": "true" },
   timeout: 90000,
@@ -20,9 +20,16 @@ app.use(cors());
 app.use(express.json());
 
 // 初始化 SQLite 数据库
-const db = new sqlite3.Database('database.db', (err) => {
+let resolveDbReady;
+let rejectDbReady;
+const dbReady = new Promise((resolve, reject) => {
+  resolveDbReady = resolve;
+  rejectDbReady = reject;
+});
+const db = new sqlite3.Database(process.env.DB_PATH || 'database.db', (err) => {
   if (err) {
     console.error('Error opening database:', err);
+    rejectDbReady(err);
   } else {
     console.log('✅ Connected to SQLite database.');
     // 创建表（如果不存在）
@@ -54,11 +61,43 @@ const db = new sqlite3.Database('database.db', (err) => {
       is_boundary BOOLEAN DEFAULT 0,
       is_core BOOLEAN DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      children_generated BOOLEAN DEFAULT 0,
       FOREIGN KEY (tree_id) REFERENCES knowledge_trees (id),
       FOREIGN KEY (parent_id) REFERENCES knowledge_nodes (id)
     )`);
+    db.all('PRAGMA table_info(knowledge_nodes)', (schemaError, columns) => {
+      if (schemaError) return rejectDbReady(schemaError);
+      if (columns.some(column => column.name === 'children_generated')) {
+        return resolveDbReady();
+      }
+      db.run('ALTER TABLE knowledge_nodes ADD COLUMN children_generated BOOLEAN DEFAULT 0', migrationError => {
+        if (migrationError) return rejectDbReady(migrationError);
+        resolveDbReady();
+      });
+    });
   }
 });
+dbReady.catch(error => console.error('Database initialization failed:', error));
+
+const dbGet = (sql, params = []) => new Promise((resolve, reject) => {
+  db.get(sql, params, (error, row) => error ? reject(error) : resolve(row));
+});
+const dbAll = (sql, params = []) => new Promise((resolve, reject) => {
+  db.all(sql, params, (error, rows) => error ? reject(error) : resolve(rows));
+});
+const dbRun = (sql, params = []) => new Promise((resolve, reject) => {
+  db.run(sql, params, function (error) {
+    error ? reject(error) : resolve({ lastID: this.lastID, changes: this.changes });
+  });
+});
+
+let expansionWriteQueue = Promise.resolve();
+function serializeExpansionWrite(operation) {
+  const result = expansionWriteQueue.then(operation);
+  expansionWriteQueue = result.catch(() => {});
+  return result;
+}
+const expansionsInFlight = new Map();
 
 
 //消毒函数：防止返回不符合json格式的文本
@@ -130,15 +169,15 @@ async function aiGenerateNodes(prompt, opts = {}) {
   try {
     return JSON.parse(cleaned);
   } catch {
-    console.warn("⚠️ 二次解析仍失败，使用 fallback。");
-    return { content: raw, children: [] };
+    throw new Error('AI 返回无法解析');
   }
 }
 
     return parsed;
   } catch (err) {
     console.error('AI 调用失败:', err.message);
-    throw new Error('AI service unavailable');
+    if (err.message === 'AI 返回无法解析' || err.message === '模型返回空内容') throw err;
+    throw new Error('AI 服务暂不可用');
   }
 }
 
@@ -272,9 +311,84 @@ app.post('/api/generate-tree', async (req, res) => {
 });
 
 
+function savedChildren(rows) {
+  return rows.map(row => ({
+    id: row.id,
+    label: row.label,
+    description: row.content,
+    relation: row.relation_type,
+    importance: row.importance,
+    difficulty: row.difficulty,
+    estimated_time: row.estimated_time,
+    is_boundary: Boolean(row.is_boundary),
+    is_core: Boolean(row.is_core),
+  }));
+}
+
+async function saveExpansion(nodeId, treeId, aiResponse) {
+  const { content, children } = aiResponse || {};
+  if (typeof content !== 'string' || !Array.isArray(children) ||
+      children.some(child => !child || typeof child.label !== 'string' || !child.label.trim())) {
+    throw new Error('AI 返回格式错误');
+  }
+
+  return serializeExpansionWrite(async () => {
+    await dbRun('BEGIN IMMEDIATE');
+    try {
+      const node = await dbGet('SELECT * FROM knowledge_nodes WHERE id = ? AND tree_id = ?', [nodeId, treeId]);
+      if (!node) throw new Error('节点不存在或不属于该知识树');
+      const existing = await dbAll(
+        'SELECT * FROM knowledge_nodes WHERE parent_id = ? AND tree_id = ? ORDER BY id',
+        [nodeId, treeId]
+      );
+      if (node.children_generated || existing.length > 0) {
+        await dbRun('COMMIT');
+        return { success: true, alreadyExpanded: true, content: node.content, children: savedChildren(existing) };
+      }
+
+      await dbRun('UPDATE knowledge_nodes SET content = ? WHERE id = ? AND tree_id = ?', [content, nodeId, treeId]);
+      const saved = [];
+      for (const child of children) {
+        const result = await dbRun(
+          `INSERT INTO knowledge_nodes
+           (tree_id, parent_id, label, content, relation_type, importance, difficulty, estimated_time, is_boundary, is_core)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [treeId, nodeId, child.label, child.description || '', child.relation || 'RELATED',
+            child.importance || 'medium', child.difficulty || 'medium', child.estimated_time || '30分钟',
+            child.is_boundary ? 1 : 0, child.is_core ? 1 : 0]
+        );
+        saved.push({ id: result.lastID, ...child });
+      }
+      await dbRun('UPDATE knowledge_nodes SET children_generated = 1 WHERE id = ? AND tree_id = ?', [nodeId, treeId]);
+      await dbRun('COMMIT');
+      return { success: true, content, children: saved };
+    } catch (error) {
+      await dbRun('ROLLBACK').catch(rollbackError => console.error('回滚扩展失败:', rollbackError));
+      throw error;
+    }
+  });
+}
+
 // API路由：扩展节点
-app.post('/api/expand-node', async (req, res) => {
-  const { nodeId, nodeLabel, treeId } = req.body;
+async function expandNodeOnce(nodeId, treeId) {
+  await dbReady;
+  const node = await dbGet(
+    'SELECT * FROM knowledge_nodes WHERE id = ? AND tree_id = ?',
+    [nodeId, treeId]
+  );
+  if (!node) {
+    const error = new Error('节点不存在或不属于该知识树');
+    error.status = 404;
+    throw error;
+  }
+  const existingChildren = await dbAll(
+    'SELECT * FROM knowledge_nodes WHERE parent_id = ? AND tree_id = ? ORDER BY id',
+    [nodeId, treeId]
+  );
+  if (node.children_generated || existingChildren.length > 0) {
+    return { success: true, alreadyExpanded: true, content: node.content, children: savedChildren(existingChildren) };
+  }
+  const nodeLabel = node.label;
   console.log(`\n=== /api/expand-node (${nodeLabel}) ===`);
 
   try {
@@ -308,50 +422,29 @@ app.post('/api/expand-node', async (req, res) => {
 仅返回这个 JSON 对象本身。`;
 
     const aiResponse = await aiGenerateNodes(prompt);
-    if (!aiResponse) return res.status(500).json({ error: "AI 返回无法解析" });
-
-    const { content, children = [] } = aiResponse;
-
-    // 更新当前节点内容
-    await new Promise((resolve, reject) => {
-      db.run('UPDATE knowledge_nodes SET content = ? WHERE id = ?', [content, nodeId],
-        (err) => { err ? reject(err) : resolve(); });
-    });
-
-    const childNodes = [];
-    for (const child of children) {
-      const newId = await new Promise((resolve, reject) => {
-        db.run(
-          `INSERT INTO knowledge_nodes
-          (tree_id, parent_id, label, content, relation_type, importance, difficulty, estimated_time, is_boundary, is_core)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            treeId,
-            nodeId,
-            child.label,
-            child.description || "",
-            child.relation || "RELATED",
-            child.importance || "medium",
-            child.difficulty || "medium",
-            child.estimated_time || "30分钟",
-            child.is_boundary ? 1 : 0,
-            child.is_core ? 1 : 0,
-          ],
-          function (err) {
-            if (err) return reject(err);
-            console.log("✅ 插入子节点:", child.label);
-            resolve(this.lastID);
-          }
-        );
-      });
-
-      childNodes.push({ id: newId, ...child });
-    }
-
-    res.json({ success: true, content, children: childNodes });
+    return await saveExpansion(nodeId, treeId, aiResponse);
   } catch (err) {
     console.error("expand-node 出错:", err.message);
-    res.status(500).json({ error: err.message });
+    throw err;
+  }
+}
+
+app.post('/api/expand-node', async (req, res) => {
+  const nodeId = Number(req.body?.nodeId);
+  const treeId = Number(req.body?.treeId);
+  if (!Number.isSafeInteger(nodeId) || nodeId <= 0 || !Number.isSafeInteger(treeId) || treeId <= 0) {
+    return res.status(400).json({ error: '无效的 nodeId 或 treeId' });
+  }
+  const key = `${treeId}:${nodeId}`;
+  let operation = expansionsInFlight.get(key);
+  if (!operation) {
+    operation = expandNodeOnce(nodeId, treeId).finally(() => expansionsInFlight.delete(key));
+    expansionsInFlight.set(key, operation);
+  }
+  try {
+    res.json(await operation);
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message });
   }
 });
 
@@ -401,7 +494,10 @@ app.delete('/api/tree/:treeId', (req, res) => {
 });
 
 
-// 启动服务器
-app.listen(port, () => {
-  console.log(`🚀 MindGraph Tutor server running at http://localhost:${port}`);
-});
+if (require.main === module) {
+  app.listen(port, () => {
+    console.log(`🚀 MindGraph Tutor server running at http://localhost:${port}`);
+  });
+}
+
+module.exports = { app, db, dbReady };
