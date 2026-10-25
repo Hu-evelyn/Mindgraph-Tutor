@@ -62,7 +62,8 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #f8fafc;
+  /* 视觉统一：导图画布沿用工作台底色，节点语义色保持原样。 */
+  background: var(--mt-canvas);
   padding: 20px;
   min-height: 0; /* 重要：防止容器溢出 */
 }
@@ -73,8 +74,8 @@
   position: sticky;
   top: 0;
   z-index: 20;
-  background: white;
-  border-bottom: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.94);
+  border-bottom: 1px solid var(--mt-border);
   padding: 12px 16px;
   margin: -20px -20px 20px -20px; /* 抵消容器的 padding */
 }
@@ -93,8 +94,9 @@
 .mind-map-content {
   flex: 1;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--mt-border);
+  border-radius: 16px;
+  box-shadow: var(--mt-shadow);
   overflow: hidden;
   position: relative;
   min-height: 0; /* 重要：防止内容溢出 */
@@ -105,7 +107,10 @@
   width: 100%;
   height: 100%;
   min-height: 500px;
-  background: #f8fafc;
+  /* 视觉统一：低对比度网格帮助观察空间位置，不修改任何节点或连线。 */
+  background-color: #f9fbff;
+  background-image: radial-gradient(#dce5f3 0.75px, transparent 0.75px);
+  background-size: 20px 20px;
 }
 
 /* 节点样式 */

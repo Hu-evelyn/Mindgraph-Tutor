@@ -70,20 +70,16 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
   const structuredNodes = buildTreeStructure(treeNodes);
 
   return (
+    // 视觉统一：树列表与首页卡片共用表面样式；节点展开逻辑保持原样。
     <div className="flex-1 overflow-auto p-6">
       <div className="max-w-4xl mx-auto">
-        {/* 知识树标题 */}
-        <div className="mb-6 text-center">
-          <h2 className="text-2xl font-bold text-gray-800"></h2>
-        </div>
-
         {/* 树状图容器 */}
         {expansionError && (
           <div role="alert" className="mb-3 text-sm text-red-700">
             扩展失败：{expansionError}。请再次点击节点箭头重试。
           </div>
         )}
-        <div className="relative max-h-[70vh] overflow-y-auto border border-gray-200 rounded-lg p-4 bg-white">
+        <div className="mt-surface relative max-h-[70vh] overflow-y-auto p-4">
           {structuredNodes.map((rootNode, index) => (
           <TreeNode
             key={rootNode.id}

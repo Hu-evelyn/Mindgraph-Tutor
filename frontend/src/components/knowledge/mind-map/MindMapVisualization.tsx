@@ -471,23 +471,23 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
 
   return (
   <div className="mind-map-container" ref={containerRef}>
-    {/* 固定在顶部的控制栏 */}
+    {/* 视觉统一：导图工具栏复用柔和按钮样式，缩放及重置处理函数保持不变。 */}
     <div className="mind-map-controls-fixed">
       <div className="flex justify-between items-center">
     
-        <div className="flex gap-20 items-center">
+        <div className="flex flex-wrap gap-4 items-center">
           <button
             onClick={resetView}
-            className="px-5 py-1.5 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+            className="mt-soft-button px-4 py-1.5 text-sm"
           >
             重置视图
           </button>
           <div className="flex items-center gap-3 text-sm text-gray-600">
             {/* 缩放控制按钮 */}
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+            <div className="mt-view-switcher flex items-center gap-1 p-1">
               <button
                 onClick={handleZoomOut}
-                className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-200 transition-colors"
+                className="mt-view-tab w-8 h-8 flex items-center justify-center transition-colors"
                 title="缩小"
               >
                 -
@@ -497,7 +497,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
               </span>
               <button
                 onClick={handleZoomIn}
-                className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-200 transition-colors"
+                className="mt-view-tab w-8 h-8 flex items-center justify-center transition-colors"
                 title="放大"
               >
                 +
@@ -511,7 +511,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
                 max="300"
                 value={zoom * 100}
                 onChange={(e) => handleZoomChange(parseInt(e.target.value) / 100)}
-                className="w-24 accent-blue-500"
+                className="w-24 accent-[var(--mt-accent)]"
                 title="缩放调整"
               />
             </div>

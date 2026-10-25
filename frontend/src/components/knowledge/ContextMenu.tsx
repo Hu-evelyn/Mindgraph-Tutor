@@ -35,10 +35,10 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [onClose]);
 
-//展开节点显示对话
+// 视觉统一：右键菜单沿用工作台卡片和按钮样式，确认与取消行为不变。
   return (
     <div 
-      className="context-menu fixed z-50 bg-white border border-gray-300 rounded-lg shadow-lg p-4 min-w-64"
+      className="context-menu mt-surface fixed z-50 p-4 min-w-64"
       style={{ left: x, top: y }}
     >
       <h4 className="font-semibold text-gray-800 mb-3">节点操作</h4>
@@ -47,13 +47,13 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       <div className="flex gap-2 justify-end">
         <button
           onClick={handleCancel}
-          className="px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+          className="mt-soft-button px-3 py-1.5 text-sm"
         >
           否
         </button>
         <button
           onClick={handleExpand}
-          className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+          className="mt-primary-button px-3 py-1.5 text-sm"
         >
           是
         </button>

@@ -18,15 +18,16 @@ export const KnowledgeViewSwitcher: React.FC<KnowledgeViewSwitcherProps> = ({
   ];
 
   return (
-    <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
+    // 视觉统一：两个视图按钮共享同一分段控件外观，切换行为不变。
+    <div className="mt-view-switcher flex items-center gap-1 p-1">
       {views.map((view) => (
         <button
           key={view.key}
           onClick={() => onViewChange(view.key)}
-          className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`mt-view-tab flex items-center gap-2 px-3 py-2 text-sm font-medium transition-colors ${
             currentView === view.key
-              ? 'bg-white text-blue-600 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'mt-view-tab-active'
+              : ''
           }`}
         >
           <view.icon className="w-4 h-4" />

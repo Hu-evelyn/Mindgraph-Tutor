@@ -4,6 +4,7 @@ import { useKnowledgeStore } from '../../stores/useKnowledgeStore';
 import { KnowledgeTree } from './KnowledgeTree';
 import { MindMapVisualization } from './mind-map/MindMapVisualization';
 import { KnowledgeViewSwitcher, type KnowledgeViewMode } from './KnowledgeViewSwitcher';
+import { KnowledgeNodeSearch } from './KnowledgeNodeSearch';
 import type { TreeKnowledgeNode, DbKnowledgeNode } from '../../types';
 
 // 帮助信息组件
@@ -15,7 +16,7 @@ const HelpTooltip: React.FC = () => {
       {/* 帮助按钮 */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors"
+        className="mt-soft-button w-8 h-8 flex items-center justify-center rounded-full text-sm"
         title="查看帮助"
       >
         ?
@@ -23,7 +24,7 @@ const HelpTooltip: React.FC = () => {
 
       {/* 帮助内容 */}
       {isOpen && (
-        <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl z-50 p-4">
+        <div className="mt-surface absolute top-full right-0 mt-2 w-80 z-50 p-4">
           <div className="flex justify-between items-start mb-3">
             <h3 className="font-semibold text-gray-800">知识关系说明</h3>
             <button
@@ -191,23 +192,28 @@ export const KnowledgeMap: React.FC = () => {
   }
 
   return (
+    // 视觉统一：主题标题、视图工具和内容区采用同一工作台层级。
     <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-      {/* 视图切换器 */}
-      <div className="flex justify-between items-center p-6 border-b">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800">{tree.root_topic}</h2>
-          <p className="text-gray-600">
-            共 {treeNodes.length} 个节点 • 
-            当前视图: {currentView === 'tree' ? '树状列表' : '思维导图'}
-            {isLoading && ' • 加载中...'}
-          </p>
+      {/* 顶部对齐：主题栏固定在工作台栏下方，搜索框占第二行；原视图切换功能保持不变。 */}
+      <div className="mt-panel-header mt-main-header flex flex-col justify-center px-6 py-3 border-b">
+        <div className="flex flex-wrap justify-between items-center gap-3">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-[var(--mt-ink)]">{tree.root_topic}</h2>
+            <p className="mt-muted text-sm mt-1">
+              共 {treeNodes.length} 个节点 • 当前视图: {currentView === 'tree' ? '树状列表' : '思维导图'}
+              {isLoading && ' • 加载中...'}
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            <HelpTooltip />
+            <KnowledgeViewSwitcher
+              currentView={currentView}
+              onViewChange={setCurrentView}
+            />
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <HelpTooltip />
-          <KnowledgeViewSwitcher 
-            currentView={currentView} 
-            onViewChange={setCurrentView} 
-          />
+        <div className="mt-3">
+          <KnowledgeNodeSearch key={tree.id} nodes={treeNodes} onSelect={setFocusNode} />
         </div>
       </div>
 

@@ -78,10 +78,10 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
 
   return (
     <div>
-      {/* 节点行 */}
+      {/* 视觉统一：节点行共用悬停与选中样式；缩进和标签语义保持不变。 */}
       <div
-        className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer select-none
-          ${isFocused ? 'bg-blue-100 border border-blue-300' : 'hover:bg-gray-100'}`}
+        className={`mt-node-row flex items-center gap-2 px-2 py-2 cursor-pointer select-none
+          ${isFocused ? 'mt-node-row-active' : ''}`}
         style={{ paddingLeft: indent }}
         onClick={handleNodeClick}
       >

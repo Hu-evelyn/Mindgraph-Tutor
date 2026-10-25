@@ -6,6 +6,7 @@ import { ChatPanel } from '../chat/ChatPanel';
 import { ResizablePanel } from '../ui/ResizablePanel';
 import { KnowledgeMap } from '../knowledge/KnowledgeMap';
 import { ResizablePanelGroup } from '../ui/ResizablePanelGroup'; 
+import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 
 
 // 帮助信息组件（与上面相同）
@@ -63,7 +64,7 @@ const HelpTooltip: React.FC = () => {
 };
 
 export const ThreePanelLayout: React.FC = () => {
-  const { currentTree } = useKnowledgeStore();
+  const { setCurrentTree } = useKnowledgeStore();
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
 
   const handleToggleLeftPanel = () => {
@@ -71,10 +72,11 @@ export const ThreePanelLayout: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen bg-white">
+    // 视觉统一：三面板共用浅色工作台底色和分隔线，面板折叠及拖拽逻辑不变。
+    <div className="mt-workspace flex h-screen">
       {/* 左侧面板 - 固定宽度，不再使用 ResizablePanel */}
       {!isLeftPanelCollapsed ? (
-        <div className="w-60 flex-shrink-0 bg-gray-50 border-r">
+        <div className="mt-sidebar w-64 flex-shrink-0 border-r">
           <SessionList 
             onToggleCollapse={handleToggleLeftPanel}
             isCollapsed={false}
@@ -82,7 +84,7 @@ export const ThreePanelLayout: React.FC = () => {
         </div>
       ) : (
         // 收起状态下的固定宽度面板
-        <div className="w-0 bg-gray-50 border-r flex-shrink-0">
+        <div className="mt-sidebar w-0 border-r flex-shrink-0">
           <SessionList 
             onToggleCollapse={handleToggleLeftPanel}
             isCollapsed={true}
@@ -92,15 +94,29 @@ export const ThreePanelLayout: React.FC = () => {
 
       {/* 中间和右侧面板容器 - 使用 ResizablePanelGroup 实现联动 */}
       <div className="flex-1 flex min-w-0">
-        <ResizablePanelGroup className="flex-1">
+        <ResizablePanelGroup className="flex-1 min-w-0">
           {/* 中间面板 */}
-          <div className="h-full bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
-            <div className="h-15 p-4 border-b bg-white/80 backdrop-blur-sm">
-              <div className="flex items-center justify-between">
+          <div className="h-full mt-page flex flex-col min-w-0">
+            {/* 视觉统一：原有空白顶栏改为简洁的工作台标识，仍保留展开侧栏按钮。 */}
+            <div className="mt-panel-header h-14 px-6 border-b flex-shrink-0">
+              <div className="h-full flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  {/* 返回逻辑：清除当前树选择，复用 App 已有的知识库选择页面。 */}
+                  <button
+                    type="button"
+                    onClick={() => setCurrentTree(null)}
+                    className="mt-soft-button flex flex-shrink-0 items-center gap-1.5 px-3 py-1.5 text-sm"
+                    title="返回知识库"
+                  >
+                    <ArrowLeftIcon className="w-4 h-4" />
+                    返回知识库
+                  </button>
+                  <span className="mt-kicker truncate">Mindgraph Tutor · 学习工作台</span>
+                </div>
                 {isLeftPanelCollapsed && (
                   <button
                     onClick={handleToggleLeftPanel}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-sm text-gray-600"
+                    className="mt-soft-button px-3 py-1.5 text-sm"
                   >
                     展开边栏
                   </button>
@@ -112,7 +128,7 @@ export const ThreePanelLayout: React.FC = () => {
           </div>
 
           {/* 右侧面板 */}
-          <div className="h-full flex flex-col bg-white">
+          <div className="h-full flex flex-col bg-white min-w-0">
             <ChatPanel />
           </div>
         </ResizablePanelGroup>

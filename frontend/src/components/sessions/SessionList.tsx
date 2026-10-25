@@ -50,46 +50,49 @@ export const SessionList: React.FC<SessionListProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 border-r w-full"> {/* 添加 w-full */}
+    // 视觉统一：侧栏表面、搜索框、知识树卡片和弹窗沿用全站样式。
+    <div className="mt-sidebar h-full flex flex-col w-full">
       {/* 头部区域 */}
-      <div className="flex-shrink-0 p-4 border-b bg-white">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-lg font-semibold text-gray-800">知识树</h1>
+      {/* 顶部对齐：56px 标题栏和下方操作区与中、右两列形成相同的两条水平线。 */}
+      <div className="mt-panel-header mt-sidebar-header flex-shrink-0 border-b flex flex-col">
+        <div className="mt-topbar h-14 px-4 border-b flex items-center justify-between">
+          <h1 className="text-lg font-semibold text-[var(--mt-ink)]">知识树</h1>
           <button
             onClick={onToggleCollapse}
-            className="p-1 hover:bg-gray-100 rounded transition-colors"
+            className="mt-soft-button p-1.5"
             title="隐藏边栏"
           >
             <ChevronDoubleLeftIcon className="w-4 h-4 text-gray-600" />
           </button>
         </div>
-        
-        {/* 搜索框 */}
-        <div className="relative mb-4">
-          <input
-            type="text"
-            placeholder="搜索知识树..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
+        <div className="flex-1 px-4 py-3 flex flex-col justify-center">
+          {/* 搜索框 */}
+          <div className="relative mb-3">
+            <input
+              type="text"
+              placeholder="搜索知识树..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="mt-input w-full px-3 py-2 text-sm"
+            />
+          </div>
 
-        {/* 新建按钮 */}
-        <button
-          onClick={handleNewTree}
-          disabled={isLoading}
-          className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-        >
-          {isLoading ? (
-            <>
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              创建中...
-            </>
-          ) : (
-            '新建知识树'
-          )}
-        </button>
+          {/* 新建按钮 */}
+          <button
+            onClick={handleNewTree}
+            disabled={isLoading}
+            className="mt-primary-button w-full py-2 px-4 flex items-center justify-center gap-2"
+          >
+            {isLoading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                创建中...
+              </>
+            ) : (
+              '新建知识树'
+            )}
+          </button>
+        </div>
       </div>
 
       {/* 知识树列表 - 可滚动区域 */}
@@ -107,10 +110,10 @@ export const SessionList: React.FC<SessionListProps> = ({
               <div
                 key={tree.id}
                 onClick={() => setCurrentTree(tree.id)}
-                className={`p-4 rounded-lg cursor-pointer border transition-all relative group ${
+                className={`mt-tree-card p-4 cursor-pointer relative group ${
                   tree.id === currentTreeId 
-                    ? 'bg-blue-50 border-blue-300 shadow-sm' 
-                    : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                    ? 'mt-tree-card-active'
+                    : ''
                 }`}
               >
                 {/* 删除按钮 */}
@@ -142,7 +145,7 @@ export const SessionList: React.FC<SessionListProps> = ({
       </div>
 
       {/* 底部信息 */}
-      <div className="flex-shrink-0 p-4 border-t bg-gray-50">
+      <div className="mt-sidebar flex-shrink-0 p-4 border-t">
         <p className="text-xs text-gray-500 text-center">
           共 {filteredTrees.length} 个知识树
         </p>
@@ -154,7 +157,7 @@ export const SessionList: React.FC<SessionListProps> = ({
           className="fixed inset-0 flex items-center justify-center z-50"
           style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }} // 使用内联样式确保透明度生效
         >
-          <div className="bg-white rounded-lg p-6 max-w-sm mx-4 shadow-2xl border border-gray-200">
+          <div className="mt-surface p-6 max-w-sm mx-4">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
               是否删除此知识树？
             </h3>
@@ -164,13 +167,13 @@ export const SessionList: React.FC<SessionListProps> = ({
             <div className="flex justify-end gap-3">
               <button
                 onClick={cancelDelete}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors border border-gray-300"
+                className="mt-soft-button px-4 py-2"
               >
                 取消
               </button>
               <button
                 onClick={confirmDelete}
-                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-[10px] transition-colors"
               >
                 确认删除
               </button>

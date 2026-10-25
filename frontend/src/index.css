@@ -1,1 +1,302 @@
 @import "tailwindcss";
+
+/* 视觉统一：全站共用的颜色、字重和基础背景；不影响业务数据或交互。 */
+:root {
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  color: #20304a;
+  background: #f4f7fb;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --mt-canvas: #f4f7fb;
+  --mt-sidebar: #f8faff;
+  --mt-surface: #ffffff;
+  --mt-border: #e3eaf3;
+  --mt-ink: #20304a;
+  --mt-muted: #718097;
+  --mt-accent: #3867e8;
+  --mt-accent-hover: #2755d6;
+  --mt-accent-soft: #ebf1ff;
+  --mt-shadow: 0 12px 36px rgba(35, 60, 105, 0.07);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+/* 视觉统一：跨页面复用表面、按钮和输入框样式，保持原有点击行为。 */
+.mt-page {
+  background: radial-gradient(circle at 12% 8%, #edf3ff 0, transparent 34%), var(--mt-canvas);
+  color: var(--mt-ink);
+}
+
+.mt-workspace {
+  background: var(--mt-canvas);
+  color: var(--mt-ink);
+}
+
+.mt-sidebar {
+  background: var(--mt-sidebar);
+  border-color: var(--mt-border);
+}
+
+.mt-surface {
+  background: var(--mt-surface);
+  border: 1px solid var(--mt-border);
+  border-radius: 16px;
+  box-shadow: var(--mt-shadow);
+}
+
+.mt-panel-header {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: var(--mt-border);
+}
+
+/* 顶部对齐：桌面端在 56px 与 188px 处对齐两条线，窄屏同步增加三列标题高度。 */
+.mt-topbar {
+  flex-shrink: 0;
+  border-color: var(--mt-border);
+}
+
+.mt-sidebar-header,
+.mt-detail-header {
+  height: 188px;
+  box-sizing: border-box;
+}
+
+.mt-main-header {
+  height: 132px;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 20;
+}
+
+/* 分隔线：透明热区叠在面板上，不显示两侧浅色带，也不产生额外的横向宽度。 */
+.mt-resize-handle {
+  background: transparent;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.mt-resize-handle-horizontal {
+  margin-left: -4px;
+  margin-right: -4px;
+}
+
+.mt-resize-handle-vertical {
+  margin-top: -4px;
+  margin-bottom: -4px;
+}
+
+.mt-resize-divider {
+  background: var(--mt-border);
+}
+
+@media (max-width: 1200px) {
+  .mt-sidebar-header,
+  .mt-detail-header {
+    height: 238px;
+  }
+
+  .mt-main-header {
+    height: 182px;
+  }
+}
+
+@media (max-width: 760px) {
+  .mt-sidebar-header,
+  .mt-detail-header {
+    height: 286px;
+  }
+
+  .mt-main-header {
+    height: 230px;
+  }
+}
+
+.mt-primary-button {
+  background: var(--mt-accent);
+  color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 5px 14px rgba(56, 103, 232, 0.16);
+  transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.mt-primary-button:hover:not(:disabled) {
+  background: var(--mt-accent-hover);
+  box-shadow: 0 8px 18px rgba(56, 103, 232, 0.22);
+  transform: translateY(-1px);
+}
+
+.mt-primary-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.mt-soft-button {
+  background: #f3f6fc;
+  color: #49617f;
+  border: 1px solid var(--mt-border);
+  border-radius: 10px;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.mt-soft-button:hover {
+  background: var(--mt-accent-soft);
+  color: var(--mt-accent-hover);
+}
+
+.mt-input {
+  background: #fff;
+  border: 1px solid #dbe4ef;
+  border-radius: 10px;
+  color: var(--mt-ink);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.mt-input:focus {
+  outline: none;
+  border-color: #8da9f5;
+  box-shadow: 0 0 0 3px rgba(56, 103, 232, 0.12);
+}
+
+.mt-input::placeholder {
+  color: #9aa8ba;
+}
+
+/* 节点检索：结果悬浮在知识视图上方，避免推开已对齐的三列标题。 */
+.mt-search-results {
+  background: #fff;
+  border: 1px solid var(--mt-border);
+  border-radius: 12px;
+  box-shadow: var(--mt-shadow);
+}
+
+.mt-search-result {
+  color: var(--mt-ink);
+  border-radius: 8px;
+}
+
+.mt-search-result:hover,
+.mt-search-result:focus-visible {
+  background: var(--mt-accent-soft);
+}
+
+.mt-kicker {
+  color: #7190c7;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.mt-muted {
+  color: var(--mt-muted);
+}
+
+.mt-empty {
+  background: #f8faff;
+  border: 1px dashed #d8e2f0;
+  border-radius: 16px;
+}
+
+.mt-create-card {
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.mt-create-card:hover {
+  border-color: #a9bcf0;
+  background: #f0f5ff;
+}
+
+.mt-tree-card {
+  background: #fff;
+  border: 1px solid var(--mt-border);
+  border-radius: 14px;
+  box-shadow: 0 3px 10px rgba(35, 60, 105, 0.03);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.mt-tree-card:hover {
+  border-color: #a9bcf0;
+  box-shadow: 0 10px 24px rgba(35, 60, 105, 0.09);
+  transform: translateY(-2px);
+}
+
+.mt-tree-card-active,
+.mt-tree-card-active:hover {
+  background: var(--mt-accent-soft);
+  border-color: #a9bcf0;
+  box-shadow: inset 3px 0 0 var(--mt-accent), 0 5px 14px rgba(35, 60, 105, 0.06);
+  transform: none;
+}
+
+.mt-view-switcher {
+  background: #eef2f9;
+  border: 1px solid var(--mt-border);
+  border-radius: 12px;
+}
+
+.mt-view-tab {
+  color: #667a98;
+  border-radius: 9px;
+}
+
+.mt-view-tab:hover {
+  color: var(--mt-accent-hover);
+}
+
+.mt-view-tab-active,
+.mt-view-tab-active:hover {
+  color: var(--mt-accent-hover);
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(35, 60, 105, 0.09);
+}
+
+.mt-node-row {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.mt-node-row:hover {
+  background: #f5f8ff;
+}
+
+.mt-node-row-active,
+.mt-node-row-active:hover {
+  background: var(--mt-accent-soft);
+  border-color: #c8d7fa;
+}
+
+/* 节点详情和下方对话共用同一张圆角卡片样式，保持两块内容视觉对齐。 */
+.mt-detail-card {
+  background: #fff;
+  border: 1px solid var(--mt-border);
+  border-radius: 14px;
+  box-shadow: 0 4px 18px rgba(35, 60, 105, 0.04);
+}
+
+.mt-chat-bubble {
+  border: 1px solid var(--mt-border);
+  border-radius: 14px;
+}
+
+.mt-chat-bubble-assistant {
+  background: #f4f7fb;
+  color: var(--mt-ink);
+}
+
+.mt-chat-bubble-user {
+  background: var(--mt-accent-soft);
+  border-color: #d4e0fb;
+  color: #254c9f;
+}
+
+/* 视觉统一：键盘焦点在所有旧按钮和新样式中都清晰可见。 */
+button:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--mt-accent);
+  outline-offset: 2px;
+}

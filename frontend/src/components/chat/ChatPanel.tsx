@@ -1,7 +1,13 @@
-// 右侧面板 - 显示当前选中节点的详细内容，支持Markdown渲染和滚动
+// 右侧面板 - 上方显示节点详情，下方显示仅在前端保存的对话。
 import React from 'react';
 import { useKnowledgeStore } from '../../stores/useKnowledgeStore';
 import ReactMarkdown from 'react-markdown';
+import { BrandGraphIcon } from '../ui/BrandGraphIcon';
+import { ResizablePanelGroup } from '../ui/ResizablePanelGroup';
+import { ConversationPanel } from './ConversationPanel';
+
+// 按参考图设置默认比例：详情约占四分之三、提问区约占四分之一；仍可拖动调整。
+const RIGHT_PANEL_INITIAL_SIZES = [75, 25];
 
 export const ChatPanel: React.FC = () => {
   const { currentFocusNode, currentTree } = useKnowledgeStore();
@@ -9,25 +15,38 @@ export const ChatPanel: React.FC = () => {
   const tree = currentTree();
 
   return (
+    // 视觉统一：右侧详情面板沿用工作台标题、内容卡片和空状态样式，内容渲染不变。
     <div className="flex-1 flex flex-col bg-white min-w-0 h-full">
       {/* 头部显示当前节点信息 */}
-      <div className="p-4 border-b flex-shrink-0">
-        <h3 className="font-semibold text-lg text-gray-800">
-          {focusNode ? focusNode.label : (tree?.root_topic || 'AI学习助手')}
-        </h3>
-        {focusNode?.content && (
-          <p className="text-sm text-gray-500 mt-1">
-            节点内容 ({focusNode.content.length} 字符)
-          </p>
-        )}
+      {/* 顶部对齐：详情区也分成 56px 标题栏和节点标题区，与左、中两列的线对齐。 */}
+      <div className="mt-panel-header mt-detail-header border-b flex-shrink-0 flex flex-col">
+        <div className="mt-topbar h-14 px-5 border-b flex items-center">
+          <p className="mt-kicker">知识点详情</p>
+        </div>
+        <div className="flex-1 px-5 py-4">
+          <h3 className="font-semibold text-lg text-[var(--mt-ink)]">
+            {focusNode ? focusNode.label : (tree?.root_topic || 'AI学习助手')}
+          </h3>
+          {focusNode?.content && (
+            <p className="mt-muted text-xs mt-1">
+              节点内容 ({focusNode.content.length} 字符)
+            </p>
+          )}
+        </div>
       </div>
       
-      {/* 节点内容区域 - 支持Markdown和滚动 */}
-      <div className="flex-1 flex flex-col min-h-0 p-4">
+      {/* 上下两张卡片共用左右边距；去掉可见横线，卡片间的透明区域仍可拖动。 */}
+      <ResizablePanelGroup
+        direction="vertical"
+        initialSizes={RIGHT_PANEL_INITIAL_SIZES}
+        hideDivider
+        className="flex-1 min-h-0 bg-[var(--mt-canvas)]"
+      >
+      <div className="h-full min-h-0 px-5 pt-5 pb-2">
         {focusNode?.content ? (
-          <div className="flex-1 flex flex-col border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+          <div className="mt-detail-card h-full flex flex-col min-h-0 overflow-hidden">
             {/* Markdown内容区域 */}
-            <div className="flex-1 overflow-auto p-4">
+            <div className="flex-1 overflow-auto p-5">
               <div className="prose prose-sm max-w-none">
                 <ReactMarkdown
                   components={{
@@ -65,7 +84,7 @@ export const ChatPanel: React.FC = () => {
             </div>
             
             {/* 底部状态栏 */}
-            <div className="border-t border-gray-200 bg-white px-4 py-2 flex items-center justify-between">
+            <div className="border-t border-[var(--mt-border)] bg-white px-5 py-2 flex items-center justify-between">
               <span className="text-xs text-gray-500">
                 Markdown格式
               </span>
@@ -78,9 +97,10 @@ export const ChatPanel: React.FC = () => {
           </div>
         ) : (
           // 无内容时的提示
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50">
+          <div className="mt-empty h-full flex flex-col min-h-0 overflow-auto items-center justify-center text-gray-400">
             <div className="text-center p-6">
-              <div className="text-4xl mb-3">📚</div>
+              {/* 空状态图标：复用入口页的知识图谱造型，仅缩小尺寸以适配右侧面板。 */}
+              <BrandGraphIcon size="small" className="mx-auto mb-4" />
               <p className="text-lg font-medium text-gray-500 mb-2">
                 {tree ? '选择节点查看详情' : '创建知识树开始学习'}
               </p>
@@ -94,6 +114,15 @@ export const ChatPanel: React.FC = () => {
           </div>
         )}
       </div>
+      <div className="h-full min-h-0 px-5 pt-2 pb-5">
+        {/* 前端对话：按知识树和焦点节点分组，不接入后端或生成模拟回答。 */}
+        <ConversationPanel
+          contextKey={`${tree?.id ?? 'none'}:${focusNode?.id ?? 'general'}`}
+          contextLabel={focusNode?.label ?? tree?.root_topic ?? '当前主题'}
+          hasSelectedNode={Boolean(focusNode)}
+        />
+      </div>
+      </ResizablePanelGroup>
     </div>
   );
 };
