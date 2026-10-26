@@ -3,6 +3,9 @@ import type { KnowledgeTree, DbKnowledgeNode,AppState } from '../types/index';
 import { knowledgeApi} from '../services/api';
 
 interface KnowledgeState extends AppState {
+  noteLoading: Record<number, boolean>;
+  noteErrors: Record<number, string>;
+  generateNote: (nodeId: number, treeId: number) => Promise<void>;
   // 计算属性
   currentTree: () => KnowledgeTree | undefined;
   currentFocusNode: () => DbKnowledgeNode | undefined;
@@ -21,10 +24,13 @@ interface KnowledgeState extends AppState {
 }
 
 let treeLoadVersion = 0;
+let treeSelectionVersion = 0;
 let activeTreeLoad: { treeId: number; version: number; promise: Promise<void> } | null = null;
 
 export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   // 初始状态
+  noteLoading: {},
+  noteErrors: {},
   trees: [],
   currentTreeId: null,
   currentFocusNodeId: null,
@@ -140,7 +146,6 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
             isExpanded: true,
           } : n
         ),
-        currentFocusNodeId: nodeId,
         isLoading: false,
       }));
       
@@ -159,14 +164,32 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   }));
   },
 
+  generateNote: async (nodeId, treeId) => {
+    if (get().currentTreeId !== treeId || get().noteLoading[nodeId]) return;
+    const selectionVersion = treeSelectionVersion;
+    set(state => ({ noteLoading: { ...state.noteLoading, [nodeId]: true }, noteErrors: { ...state.noteErrors, [nodeId]: '' } }));
+    try {
+      const response = await knowledgeApi.generateNote(nodeId, treeId);
+      if (get().currentTreeId !== treeId || selectionVersion !== treeSelectionVersion) return;
+      set(state => ({ currentTreeNodes: state.currentTreeNodes.map(node => node.id === nodeId ? { ...node, content: response.content } : node) }));
+    } catch (error) {
+      if (get().currentTreeId === treeId && selectionVersion === treeSelectionVersion) set(state => ({ noteErrors: { ...state.noteErrors, [nodeId]: error instanceof Error ? error.message : '笔记生成失败' } }));
+    } finally {
+      if (get().currentTreeId === treeId && selectionVersion === treeSelectionVersion) set(state => ({ noteLoading: { ...state.noteLoading, [nodeId]: false } }));
+    }
+  },
+
   // 设置聚焦节点
   setFocusNode: (nodeId: number | null) => {
     set({ currentFocusNodeId: nodeId });
+    const treeId = get().currentTreeId;
+    if (nodeId !== null && treeId !== null) void get().generateNote(nodeId, treeId);
   },
 
   // 设置当前知识树
   setCurrentTree: (treeId: number | null) => {
     if (get().currentTreeId === treeId) return;
+    treeSelectionVersion++;
     // 切换时使旧响应失效，并清除上一棵树的节点与焦点。
     treeLoadVersion++;
     activeTreeLoad = null;
@@ -174,6 +197,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       currentTreeId: treeId,
       currentFocusNodeId: null,
       currentTreeNodes: [],
+      noteLoading: {},
+      noteErrors: {},
       isLoading: treeId !== null,
     });
   },

@@ -10,7 +10,7 @@ import { ConversationPanel } from './ConversationPanel';
 const RIGHT_PANEL_INITIAL_SIZES = [75, 25];
 
 export const ChatPanel: React.FC = () => {
-  const { currentFocusNode, currentTree } = useKnowledgeStore();
+  const { currentFocusNode, currentTree, noteLoading, noteErrors, generateNote } = useKnowledgeStore();
   const focusNode = currentFocusNode();
   const tree = currentTree();
 
@@ -43,7 +43,14 @@ export const ChatPanel: React.FC = () => {
         className="flex-1 min-h-0 bg-[var(--mt-canvas)]"
       >
       <div className="h-full min-h-0 px-5 pt-5 pb-2">
-        {focusNode?.content ? (
+        {focusNode && noteLoading[focusNode.id] ? (
+          <div className="mt-detail-card h-full p-5 text-sm text-gray-500" role="status">正在生成并保存学习笔记...</div>
+        ) : focusNode && noteErrors[focusNode.id] ? (
+          <div className="mt-detail-card h-full p-5 text-sm text-red-700" role="alert">
+            {noteErrors[focusNode.id]}
+            <button className="mt-soft-button ml-2 px-3 py-1" onClick={() => tree && void generateNote(focusNode.id, tree.id)}>重试</button>
+          </div>
+        ) : focusNode?.content ? (
           <div className="mt-detail-card h-full flex flex-col min-h-0 overflow-hidden">
             {/* Markdown内容区域 */}
             <div className="flex-1 overflow-auto p-5">
@@ -53,6 +60,7 @@ export const ChatPanel: React.FC = () => {
                     // 自定义Markdown组件样式
                     h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-3 text-gray-800" {...props} />,
                     h2: ({node, ...props}) => <h2 className="text-lg font-semibold mt-3 mb-2 text-gray-800" {...props} />,
+                    h4: ({node, ...props}) => <h4 className="text-sm font-semibold mt-2 mb-2 text-gray-800" {...props} />,
                     h3: ({node, ...props}) => <h3 className="text-base font-medium mt-2 mb-2 text-gray-800" {...props} />,
                     p: ({node, ...props}) => <p className="mb-2 text-gray-700 leading-relaxed" {...props} />,
                     ul: ({node, ...props}) => <ul className="list-disc list-inside mb-2 space-y-1" {...props} />,
