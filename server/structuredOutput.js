@@ -89,7 +89,6 @@ function parseGeneratedOutput(raw, kind) {
   }
   if (kind !== 'expand') throw new Error('未知生成类型');
 
-  const content = requiredText(parsed.content, 'content', 10000);
   if (children.length === 0) {
     // 空结果必须明确表示无法再拆分，不能把模型漏生成误判为成功。
     if (parsed.terminal !== true) throw new OutputValidationError('空子节点必须明确声明 terminal=true');
@@ -97,7 +96,7 @@ function parseGeneratedOutput(raw, kind) {
   } else if (parsed.terminal === true) {
     throw new OutputValidationError('terminal=true 不能同时包含子节点');
   }
-  return { content, children, terminal: children.length === 0 };
+  return { children, terminal: children.length === 0 };
 }
 
 module.exports = { parseGeneratedOutput, OutputValidationError, MAX_ROOT_CHILDREN, MAX_EXPAND_CHILDREN };

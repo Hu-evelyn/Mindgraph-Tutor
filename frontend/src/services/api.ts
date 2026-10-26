@@ -30,6 +30,10 @@ async function apiRequest<T = any>(
 
 // 知识树API
 export const knowledgeApi = {
+  generateNote: (nodeId: number, treeId: number) =>
+    apiRequest<{ success: boolean; content: string; cached: boolean }>('/generate-note', {
+      method: 'POST', body: JSON.stringify({ nodeId, treeId }),
+    }),
   // 创建新知识树
   createTree: (userPrompt: string, userId: number = 1) =>
     apiRequest<{

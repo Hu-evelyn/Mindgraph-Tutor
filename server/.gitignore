@@ -1,3 +1,9 @@
-"node_modules/" 
-".env" 
-"*.log" 
+/node_modules/
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+*.log
+/materials/
+/.rag/
