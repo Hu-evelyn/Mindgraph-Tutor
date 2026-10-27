@@ -6,6 +6,7 @@ interface KnowledgeState extends AppState {
   noteLoading: Record<number, boolean>;
   noteErrors: Record<number, string>;
   generateNote: (nodeId: number, treeId: number) => Promise<void>;
+  updateNode: (nodeId: number, treeId: number, changes: { label?: string; content?: string }) => Promise<void>;
   // 计算属性
   currentTree: () => KnowledgeTree | undefined;
   currentFocusNode: () => DbKnowledgeNode | undefined;
@@ -26,6 +27,8 @@ interface KnowledgeState extends AppState {
 let treeLoadVersion = 0;
 let treeSelectionVersion = 0;
 let activeTreeLoad: { treeId: number; version: number; promise: Promise<void> } | null = null;
+// 编辑完成后丢弃较早发起的自动笔记响应，避免覆盖手工内容。
+const noteEditVersions = new Map<string, number>();
 
 export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   // 初始状态
@@ -167,15 +170,40 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   generateNote: async (nodeId, treeId) => {
     if (get().currentTreeId !== treeId || get().noteLoading[nodeId]) return;
     const selectionVersion = treeSelectionVersion;
+    const editKey = `${treeId}:${nodeId}`;
+    const editVersion = noteEditVersions.get(editKey) ?? 0;
     set(state => ({ noteLoading: { ...state.noteLoading, [nodeId]: true }, noteErrors: { ...state.noteErrors, [nodeId]: '' } }));
     try {
       const response = await knowledgeApi.generateNote(nodeId, treeId);
-      if (get().currentTreeId !== treeId || selectionVersion !== treeSelectionVersion) return;
+      if (get().currentTreeId !== treeId || selectionVersion !== treeSelectionVersion ||
+          (noteEditVersions.get(editKey) ?? 0) !== editVersion) return;
       set(state => ({ currentTreeNodes: state.currentTreeNodes.map(node => node.id === nodeId ? { ...node, content: response.content } : node) }));
     } catch (error) {
-      if (get().currentTreeId === treeId && selectionVersion === treeSelectionVersion) set(state => ({ noteErrors: { ...state.noteErrors, [nodeId]: error instanceof Error ? error.message : '笔记生成失败' } }));
+      if (get().currentTreeId === treeId && selectionVersion === treeSelectionVersion &&
+          (noteEditVersions.get(editKey) ?? 0) === editVersion) set(state => ({ noteErrors: { ...state.noteErrors, [nodeId]: error instanceof Error ? error.message : '笔记生成失败' } }));
     } finally {
       if (get().currentTreeId === treeId && selectionVersion === treeSelectionVersion) set(state => ({ noteLoading: { ...state.noteLoading, [nodeId]: false } }));
+    }
+  },
+
+  // 按字段保存名称或笔记；两种视图和右侧详情仍共用同一份节点状态。
+  updateNode: async (nodeId, treeId, changes) => {
+    const response = await knowledgeApi.updateNode(treeId, nodeId, changes);
+    const editKey = `${treeId}:${nodeId}`;
+    noteEditVersions.set(editKey, (noteEditVersions.get(editKey) ?? 0) + 1);
+    if (get().currentTreeId !== treeId) return;
+    set(state => ({
+      currentTreeNodes: state.currentTreeNodes.map(node => node.id === nodeId
+        ? { ...node, ...response.node, isExpanded: node.isExpanded }
+        : node),
+      trees: response.rootTopic === null ? state.trees : state.trees.map(tree =>
+        tree.id === treeId ? { ...tree, root_topic: response.rootTopic! } : tree),
+      noteLoading: { ...state.noteLoading, [nodeId]: false },
+      noteErrors: { ...state.noteErrors, [nodeId]: '' },
+    }));
+    // 若保存前已有树加载请求，启动更新后的加载，让旧响应不能把刚保存的节点刷回去。
+    if (activeTreeLoad?.treeId === treeId) {
+      void get().loadTree(treeId, true).catch(error => console.error('保存后刷新知识树失败:', error));
     }
   },
 
@@ -183,7 +211,9 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   setFocusNode: (nodeId: number | null) => {
     set({ currentFocusNodeId: nodeId });
     const treeId = get().currentTreeId;
-    if (nodeId !== null && treeId !== null) void get().generateNote(nodeId, treeId);
+    // 手工编辑过的笔记已是最终内容，选中时不再发起自动生成请求。
+    const node = get().currentTreeNodes.find(item => item.id === nodeId);
+    if (nodeId !== null && treeId !== null && !node?.note_is_manual) void get().generateNote(nodeId, treeId);
   },
 
   // 设置当前知识树

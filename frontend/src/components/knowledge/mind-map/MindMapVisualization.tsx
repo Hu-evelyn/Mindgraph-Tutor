@@ -8,6 +8,7 @@ import './MindMapVisualization.css';
 
 interface MindMapVisualizationProps {
   onNodeClick?: (node: TreeKnowledgeNode) => void;
+  onEditNode: (nodeId: number) => void;
 }
 
 // 扩展 NodeLayout 接口，包含所有必需的属性
@@ -19,7 +20,8 @@ interface NodeLayout extends TreeKnowledgeNode {
 }
 
 export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({ 
-  onNodeClick 
+  onNodeClick,
+  onEditNode,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -107,13 +109,6 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   const handleZoomOut = () => {
     handleZoomChange(zoom - 0.1);
   };
-
-  // 重置缩放
-  const handleResetZoom = () => {
-    setZoom(1);
-  };
-
-
 
   useEffect(() => {
     if (svgRef.current && treeNodes.length > 0) {
@@ -300,16 +295,6 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       // 根据重要性设置边框粗细
       const borderWidth = importance === 'high' ? '3' : importance === 'medium' ? '2' : '1';
       
-      // 根据关系类型设置不同的节点形状或图标
-      let nodeShape = 'rect';
-      if (relationType === 'PREREQUISITE') {
-        // 先修关系可以用特殊形状表示
-        nodeShape = 'rect';
-      } else if (relationType === 'LEADS_TO') {
-        // 引导至关系
-        nodeShape = 'rect';
-      }
-      
       // 节点背景矩形
       const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       rect.setAttribute('width', node.width.toString());
@@ -482,6 +467,12 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
           >
             重置视图
           </button>
+          {/* 导图选中节点后可直接编辑；右键菜单也提供同一入口。 */}
+          <button type="button" disabled={currentFocusNodeId === null}
+            onClick={() => { if (currentFocusNodeId !== null) onEditNode(currentFocusNodeId); }}
+            className="mt-soft-button px-4 py-1.5 text-sm disabled:opacity-40">
+            编辑选中节点
+          </button>
           <div className="flex items-center gap-3 text-sm text-gray-600">
             {/* 缩放控制按钮 */}
             <div className="mt-view-switcher flex items-center gap-1 p-1">
@@ -569,7 +560,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
         y={contextMenu.y}
         onClose={() => setContextMenu(null)}
         onExpand={handleExpandNode}
-        nodeTitle={contextMenu.node.title}
+        onEdit={() => { onEditNode(contextMenu.node.id); setContextMenu(null); }}
       />
     )}
   </div>

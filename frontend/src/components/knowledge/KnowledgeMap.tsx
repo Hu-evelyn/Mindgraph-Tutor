@@ -5,7 +5,8 @@ import { KnowledgeTree } from './KnowledgeTree';
 import { MindMapVisualization } from './mind-map/MindMapVisualization';
 import { KnowledgeViewSwitcher, type KnowledgeViewMode } from './KnowledgeViewSwitcher';
 import { KnowledgeNodeSearch } from './KnowledgeNodeSearch';
-import type { TreeKnowledgeNode, DbKnowledgeNode } from '../../types';
+import { NodeEditDialog } from './NodeEditDialog';
+import type { TreeKnowledgeNode } from '../../types';
 
 // 帮助信息组件
 const HelpTooltip: React.FC = () => {
@@ -109,19 +110,23 @@ const HelpTooltip: React.FC = () => {
 
 export const KnowledgeMap: React.FC = () => {
   const [currentView, setCurrentView] = useState<KnowledgeViewMode>('tree');
+  const [editingNodeId, setEditingNodeId] = useState<number | null>(null);
   
   const { 
     currentTree, 
-    currentFocusNodeId, 
     setFocusNode, 
-    expandNode,
     currentTreeId,
     getCurrentTreeNodes,
+    updateNode,
     isLoading
   } = useKnowledgeStore();
   
   const tree = currentTree();
   const treeNodes = getCurrentTreeNodes();
+  const editingNode = treeNodes.find(node => node.id === editingNodeId);
+
+  // 切换知识树时关闭旧节点的编辑框，避免误把内容保存到新的学习主题。
+  useEffect(() => setEditingNodeId(null), [currentTreeId]);
 
   // 统一的节点点击处理
   const handleNodeClick = async (node: TreeKnowledgeNode) => {
@@ -166,17 +171,17 @@ export const KnowledgeMap: React.FC = () => {
     
     switch (currentView) {
       case 'tree':
-        return <KnowledgeTree onNodeClick={handleNodeClick} />;
+        return <KnowledgeTree onNodeClick={handleNodeClick} onEditNode={setEditingNodeId} />;
       
       case 'mindmap':
         return (
           <div className="h-full">
-            <MindMapVisualization onNodeClick={handleNodeClick} />
+            <MindMapVisualization onNodeClick={handleNodeClick} onEditNode={setEditingNodeId} />
           </div>
         );
       
       default:
-        return <KnowledgeTree onNodeClick={handleNodeClick} />;
+        return <KnowledgeTree onNodeClick={handleNodeClick} onEditNode={setEditingNodeId} />;
     }
   };
 
@@ -238,6 +243,13 @@ export const KnowledgeMap: React.FC = () => {
             </p>
           </div>
         </div>
+      )}
+
+      {/* 树状视图与思维导图共用节点名称编辑框；笔记编辑入口位于右侧详情。 */}
+      {editingNode && currentTreeId !== null && (
+        <NodeEditDialog key={editingNode.id} node={editingNode}
+          onClose={() => setEditingNodeId(null)}
+          onSave={label => updateNode(editingNode.id, currentTreeId, { label })} />
       )}
     </div>
   );

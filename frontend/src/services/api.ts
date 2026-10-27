@@ -1,5 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
-import type { KnowledgeTree, KnowledgeTreeResponse } from '../types/index';
+import type { DbKnowledgeNode, KnowledgeTree, KnowledgeTreeResponse } from '../types/index';
 
 // 对话历史只包含当前知识树/节点已完成的问答，供后端提供多轮上下文。
 export interface TutorChatTurn {
@@ -37,6 +37,12 @@ async function apiRequest<T = any>(
 
 // 知识树API
 export const knowledgeApi = {
+  // 名称与笔记分别保存；只提交本次修改的字段，避免改名时误覆盖笔记。
+  updateNode: (treeId: number, nodeId: number, changes: { label?: string; content?: string }) =>
+    apiRequest<{ node: DbKnowledgeNode; rootTopic: string | null }>(`/tree/${treeId}/node/${nodeId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(changes),
+    }),
   // 节点 ID 可为空：未选节点时围绕整棵知识树提问，节点语境由后端查询。
   askTutor: (treeId: number, nodeId: number | null, question: string, history: TutorChatTurn[]) =>
     apiRequest<{ answer: string }>('/chat', {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { AcademicCapIcon, DocumentTextIcon, ChevronDownIcon, ChevronRightIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { AcademicCapIcon, DocumentTextIcon, ChevronDownIcon, ChevronRightIcon, PlusIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
 import type { TreeKnowledgeNode } from '../../types';
 
 
@@ -12,6 +12,7 @@ interface TreeNodeProps {
   totalSiblings: number;
   currentFocusNodeId: number | null;
   onNodeClick: (node: TreeKnowledgeNode) => void; 
+  onEditNode: (nodeId: number) => void;
   onToggleExpand: (node: TreeKnowledgeNode) => void; // 展开/收缩回调
 }
 
@@ -20,6 +21,7 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
   depth,
   currentFocusNodeId,
   onNodeClick, //左键
+  onEditNode,
   onToggleExpand, // 接收展开/收缩回调
 }) => {
   const isExpanded = node.isExpanded ?? false;
@@ -135,7 +137,12 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
             </div>
           )}
         </div>
-        
+        {/* 编辑按钮独立于节点选择和展开操作，避免点击时触发笔记生成。 */}
+        <button type="button" title={`编辑${node.title}`} aria-label={`编辑${node.title}`}
+          onClick={event => { event.stopPropagation(); onEditNode(node.id); }}
+          className="mt-soft-button w-7 h-7 flex-shrink-0 flex items-center justify-center">
+          <PencilSquareIcon className="w-4 h-4" />
+        </button>
       </div>
 
       
@@ -153,6 +160,7 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
               totalSiblings={node.children!.length}
               currentFocusNodeId={currentFocusNodeId}
               onNodeClick={onNodeClick}
+              onEditNode={onEditNode}
               onToggleExpand={onToggleExpand} // 传递下去
             />
           ))}
