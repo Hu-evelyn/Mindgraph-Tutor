@@ -2,12 +2,20 @@
 import React from 'react';
 import { useKnowledgeStore } from '../../stores/useKnowledgeStore';
 import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+// 为笔记中的 LaTeX 公式加载 KaTeX 字体与排版样式。
+import 'katex/dist/katex.min.css';
 import { BrandGraphIcon } from '../ui/BrandGraphIcon';
 import { ResizablePanelGroup } from '../ui/ResizablePanelGroup';
 import { ConversationPanel } from './ConversationPanel';
 
 // 按参考图设置默认比例：详情约占四分之三、提问区约占四分之一；仍可拖动调整。
 const RIGHT_PANEL_INITIAL_SIZES = [75, 25];
+
+// 笔记中的行内 \frac 过于紧凑，会使分母贴近分数线；只在渲染时采用间距更大的 \dfrac。
+// 不修改已保存的笔记文本，公式的整体字号仍由 index.css 中的 .mt-note-markdown .katex 控制。
+const NOTE_KATEX_OPTIONS = { macros: { '\\frac': '\\dfrac' } };
 
 export const ChatPanel: React.FC = () => {
   const { currentFocusNode, currentTree, noteLoading, noteErrors, generateNote } = useKnowledgeStore();
@@ -54,8 +62,11 @@ export const ChatPanel: React.FC = () => {
           <div className="mt-detail-card h-full flex flex-col min-h-0 overflow-hidden">
             {/* Markdown内容区域 */}
             <div className="flex-1 overflow-auto p-5">
-              <div className="prose prose-sm max-w-none">
+              <div className="prose prose-sm max-w-none mt-note-markdown">
+                {/* 将 $...$ 和独占一行的 $$...$$ 解析并渲染为公式，保留原有 Markdown 样式。 */}
                 <ReactMarkdown
+                  remarkPlugins={[remarkMath]}
+                  rehypePlugins={[[rehypeKatex, NOTE_KATEX_OPTIONS]]}
                   components={{
                     // 自定义Markdown组件样式
                     h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-3 text-gray-800" {...props} />,

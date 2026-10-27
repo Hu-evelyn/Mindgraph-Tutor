@@ -11,9 +11,12 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
+    "katex": "^0.19.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
