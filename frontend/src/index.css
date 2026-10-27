@@ -278,6 +278,18 @@ body {
   box-shadow: 0 4px 18px rgba(35, 60, 105, 0.04);
 }
 
+/* KaTeX 默认字号为正文的 1.21 倍；在笔记中改为1.1倍，使行内公式更整齐。 */
+.mt-note-markdown .katex {
+  font-size: 1.1em;
+}
+
+/* 笔记中的长块公式在卡片内横向滚动，避免撑宽右侧面板。 */
+.mt-note-markdown .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 .mt-chat-bubble {
   border: 1px solid var(--mt-border);
   border-radius: 14px;
