@@ -7,6 +7,7 @@ interface ResizablePanelGroupProps {
   className?: string;
   initialSizes?: number[];
   hideDivider?: boolean;
+  expandLastPanelTo?: number;
 }
 
 export const ResizablePanelGroup: React.FC<ResizablePanelGroupProps> = ({
@@ -14,7 +15,8 @@ export const ResizablePanelGroup: React.FC<ResizablePanelGroupProps> = ({
   direction = 'horizontal',
   className = '',
   initialSizes,
-  hideDivider = false
+  hideDivider = false,
+  expandLastPanelTo,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isResizing, setIsResizing] = useState(false);
@@ -31,6 +33,15 @@ export const ResizablePanelGroup: React.FC<ResizablePanelGroupProps> = ({
         : Array(childrenCount).fill(100 / childrenCount));
     }
   }, [childrenCount, initialSizes]);
+
+  // 对话开始后只补足下方面板的最小展示比例；用户已手动拖得更大时不收缩它。
+  useEffect(() => {
+    if (childrenCount !== 2 || expandLastPanelTo === undefined) return;
+    setPanelSizes(previous => {
+      if (previous.length !== 2 || previous[1] >= expandLastPanelTo) return previous;
+      return [100 - expandLastPanelTo, expandLastPanelTo];
+    });
+  }, [childrenCount, expandLastPanelTo]);
 
   const handleMouseDown = (index: number, e: React.MouseEvent) => {
     e.preventDefault();
