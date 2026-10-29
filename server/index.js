@@ -25,7 +25,7 @@ const { fetch: directFetch, Agent } = require('undici');
 const directAgent = new Agent();
 
 const client = new OpenAI({
-  baseURL: process.env.ZHIPU_BASE_URL,
+  baseURL: process.env.ZHIPU_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4/',
   apiKey: process.env.ZHIPU_API_KEY,
   fetch: (url, options) =>
     directFetch(url, { ...options, dispatcher: directAgent }),
@@ -220,16 +220,16 @@ async function aiGenerateNodes(prompt, kind) {
 }
 
 // 树、根节点和一级节点作为整体保存，任一插入失败则回滚。
-async function saveTree(userId, topic, rootContent, children) {
+async function saveTree(userId, treeTitle, rootTopic, rootContent, children) {
   return withTransaction(async () => {
     const tree = await dbRun(
       'INSERT INTO knowledge_trees (user_id, root_topic) VALUES (?, ?)',
-      [userId, topic]
+      [userId, treeTitle]
     );
 
     const root = await dbRun(
       'INSERT INTO knowledge_nodes (tree_id, label, content, relation_type, children_generated) VALUES (?, ?, ?, ?, 1)',
-      [tree.lastID, topic, rootContent, 'core']
+      [tree.lastID, rootTopic, rootContent, 'core']
     );
 
     for (const child of children) {
@@ -258,7 +258,7 @@ async function saveTree(userId, topic, rootContent, children) {
       treeId: tree.lastID,
       rootNode: {
         id: root.lastID,
-        label: topic,
+        label: rootTopic,
         content: rootContent,
       },
       nodes: children,
@@ -288,21 +288,32 @@ app.post('/api/generate-tree', async (req, res) => {
     console.log('\n=== /api/generate-tree 请求开始 ===');
     console.log('收到 userPrompt:', userPrompt);
 
-    // 1. 提取主题
-    const extractPrompt =
-      `用户说：“${userPrompt}” 请从中提取学习主题，仅返回主题名。`;
+    // 将用户的长描述拆成展示标题和知识图谱的核心主题，避免把整句需求放进根节点。
+    const extractPrompt = `请从用户的学习需求中提取简洁的展示标题和核心学习主题，只返回 JSON：
+{"title":"适合显示在知识库和知识树中的标题","topic":"实际要学习的核心学科或主题"}
+要求：title 保留明确的学习目标或大纲意图，控制在 30 个汉字以内；topic 只保留学科/知识主题，控制在 20 个汉字以内；不要复述用户的请求。
+示例：用户说“我想学习数学分析，请给我整体的学习规划大纲”时，返回 {"title":"数学分析学习大纲","topic":"数学分析"}。
+用户输入：${userPrompt}`;
 
     const topicResp = await client.chat.completions.create({
       model: process.env.ZHIPU_MODEL || 'glm-4.5-flash',
       thinking: { type: 'disabled' },
+      response_format: { type: 'json_object' },
       messages: [{ role: 'user', content: extractPrompt }],
       temperature: 0,
     });
 
-    const topic =
-      topicResp.choices?.[0]?.message?.content?.trim() || '未知主题';
+    let extracted = {};
+    try {
+      extracted = JSON.parse(topicResp.choices?.[0]?.message?.content || '{}');
+    } catch (parseError) {
+      console.warn('主题提取结果不是 JSON，使用文本结果兜底:', parseError.message);
+      extracted = { title: topicResp.choices?.[0]?.message?.content?.trim() };
+    }
+    const treeTitle = String(extracted.title || '').trim().slice(0, 60) || '未命名学习主题';
+    const topic = String(extracted.topic || '').trim().slice(0, 40) || treeTitle;
 
-    console.log('📘 提取到的主题:', topic);
+    console.log('📘 提取到的标题和核心主题:', { treeTitle, topic });
 
     // 2. 评估难度
     const diffPrompt =
@@ -329,7 +340,7 @@ app.post('/api/generate-tree', async (req, res) => {
     const aiRes = await aiGenerateNodes(outlinePrompt, 'tree');
 
     res.json(
-      await saveTree(userId, topic, rootContent, aiRes.children)
+      await saveTree(userId, treeTitle, topic, rootContent, aiRes.children)
     );
   } catch (err) {
     console.error('生成知识树失败:', err.message);
@@ -561,6 +572,62 @@ app.post('/api/generate-note', async (req, res) => {
     notesInFlight.set(key, operation);
   }
   try { res.json(await operation); } catch (error) { res.status(error.status || 500).json({ error: error.message }); }
+});
+
+// AI 助手对话：树和节点语境由服务端按 ID 查询，避免信任客户端传入的节点内容。
+app.post('/api/chat', async (req, res) => {
+  const { treeId, nodeId = null, question, history = [] } = req.body || {};
+  if (!Number.isSafeInteger(treeId) || treeId <= 0) {
+    return res.status(400).json({ error: '无效的 treeId' });
+  }
+  if (nodeId !== null && (!Number.isSafeInteger(nodeId) || nodeId <= 0)) {
+    return res.status(400).json({ error: '无效的 nodeId' });
+  }
+  if (typeof question !== 'string' || !question.trim() || question.length > 2000) {
+    return res.status(400).json({ error: '问题必须是 1-2000 字符的文本' });
+  }
+
+  try {
+    await dbReady;
+    const tree = await dbGet('SELECT id, root_topic FROM knowledge_trees WHERE id = ?', [treeId]);
+    if (!tree) return res.status(404).json({ error: '知识树不存在' });
+
+    let node = null;
+    let note = '';
+    let nodeContext = '用户正在围绕整棵知识树提问。';
+    if (nodeId !== null) {
+      node = await dbGet('SELECT id, tree_id, parent_id, label, content FROM knowledge_nodes WHERE id = ? AND tree_id = ?', [nodeId, treeId]);
+      if (!node) return res.status(404).json({ error: '知识点不存在或不属于当前知识树' });
+      note = (node.content || '').slice(0, 8000);
+      const context = await getNodeContext(node);
+      nodeContext = `当前知识点：${node.label}\n知识路径：${[...context.ancestors, node.label].join(' > ')}`;
+    }
+
+    const turns = Array.isArray(history)
+      ? history.filter(turn => turn && ['user', 'assistant'].includes(turn.role) && typeof turn.content === 'string')
+        .slice(-10).map(turn => ({ role: turn.role, content: turn.content.slice(0, 4000) }))
+      : [];
+    const response = await client.chat.completions.create({
+      model: process.env.ZHIPU_MODEL || 'glm-4.5-flash',
+      thinking: { type: 'disabled' },
+      messages: [
+        {
+          role: 'system',
+          content: `你是 MindGraph Tutor 的中文学习助手。请针对用户问题清晰、准确地解释，必要时使用 Markdown 和公式。优先结合当前知识树与知识点笔记；没有笔记时也要根据学科知识直接回答。不要声称已经执行了未执行的操作。\n知识树标题：${tree.root_topic}\n${nodeContext}${note ? `\n知识点笔记：\n${note}` : ''}`,
+        },
+        ...turns,
+        { role: 'user', content: question.trim() },
+      ],
+      temperature: 0.4,
+      max_tokens: 3000,
+    });
+    const answer = response.choices?.[0]?.message?.content?.trim();
+    if (!answer) return res.status(502).json({ error: 'AI 没有返回有效回复，请重试' });
+    res.json({ answer });
+  } catch (error) {
+    console.error('AI 助手对话失败:', error.message);
+    res.status(error.status || 502).json({ error: error.message || 'AI 服务暂不可用，请检查模型配置' });
+  }
 });
 
 // 扩展节点接口

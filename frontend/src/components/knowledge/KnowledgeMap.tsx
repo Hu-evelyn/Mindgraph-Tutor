@@ -175,7 +175,7 @@ export const KnowledgeMap: React.FC = () => {
       
       case 'mindmap':
         return (
-          <div className="h-full">
+          <div className="flex-1 min-h-0 min-w-0 flex flex-col">
             <MindMapVisualization onNodeClick={handleNodeClick} onEditNode={setEditingNodeId} />
           </div>
         );
@@ -200,10 +200,10 @@ export const KnowledgeMap: React.FC = () => {
     // 视觉统一：主题标题、视图工具和内容区采用同一工作台层级。
     <div className="flex-1 flex flex-col overflow-hidden min-w-0">
       {/* 顶部对齐：主题栏固定在工作台栏下方，搜索框占第二行；原视图切换功能保持不变。 */}
-      <div className="mt-panel-header mt-main-header flex flex-col justify-center px-6 py-3 border-b">
+      <div className="mt-panel-header mt-main-header flex shrink-0 flex-col justify-center px-6 py-3 border-b min-w-0">
         <div className="flex flex-wrap justify-between items-center gap-3">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight text-[var(--mt-ink)]">{tree.root_topic}</h2>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-2xl font-bold tracking-tight text-[var(--mt-ink)] break-words [overflow-wrap:anywhere]">{tree.root_topic}</h2>
             <p className="mt-muted text-sm mt-1">
               共 {treeNodes.length} 个节点 • 当前视图: {currentView === 'tree' ? '树状列表' : '思维导图'}
               {isLoading && ' • 加载中...'}
@@ -223,8 +223,8 @@ export const KnowledgeMap: React.FC = () => {
       </div>
 
       {/* 当前视图内容 */}
-      <div className="flex-1 overflow-auto">
-        <div className="w-full max-w-full mx-auto"> {/* 增加中间面板宽度 */}
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        <div className="w-full max-w-full mx-auto flex-1 min-h-0 min-w-0 flex flex-col"> {/* 增加中间面板宽度 */}
           {renderCurrentView()}
         </div>
       </div>
