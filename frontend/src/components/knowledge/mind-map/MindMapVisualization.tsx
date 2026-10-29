@@ -29,7 +29,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   const [expansionError, setExpansionError] = useState<{nodeId: number; treeId: number; message: string} | null>(null);
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 1000, height: 600 });
   const [isDragging, setIsDragging] = useState(false);
-  const [startPan, setStartPan] = useState({ x: 0, y: 0 });
+  const panPoint = useRef<{ x: number; y: number } | null>(null);
   const [zoom, setZoom] = useState(1);
   
   const {
@@ -44,6 +44,11 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
 
   const treeNodes = getCurrentTreeNodes();
   const tree = currentTree();
+
+  useEffect(() => {
+    setViewBox({ x: 0, y: 0, width: 1000, height: 600 });
+    setZoom(1);
+  }, [currentTreeId]);
 
   // 自动调整思维导图大小以适应内容
   const calculateOptimalViewBox = (layout: NodeLayout[]) => {
@@ -69,29 +74,30 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   };
 
   // 鼠标拖动处理
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button === 0) { // 左键
-      setIsDragging(true);
-      setStartPan({ x: e.clientX, y: e.clientY });
+  const handlePointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest('.mind-map-node-group')) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    panPoint.current = { x: event.clientX, y: event.clientY };
+    setIsDragging(true);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (!panPoint.current || !svgRef.current) return;
+    const bounds = svgRef.current.getBoundingClientRect();
+    const point = panPoint.current;
+    const dx = (event.clientX - point.x) * viewBox.width / Math.max(bounds.width, 1);
+    const dy = (event.clientY - point.y) * viewBox.height / Math.max(bounds.height, 1);
+    setViewBox(previous => ({ ...previous, x: previous.x - dx, y: previous.y - dy }));
+    panPoint.current = { x: event.clientX, y: event.clientY };
+  };
+
+  const handlePointerUp = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
     }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    
-    const dx = 2*(e.clientX - startPan.x) / zoom;
-    const dy = 2*(e.clientY - startPan.y) / zoom;
-    
-    setViewBox(prev => ({
-      ...prev,
-      x: prev.x - dx,
-      y: prev.y - dy
-    }));
-    
-    setStartPan({ x: e.clientX, y: e.clientY });
-  };
-
-  const handleMouseUp = () => {
+    panPoint.current = null;
     setIsDragging(false);
   };
 
@@ -111,52 +117,47 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   };
 
   useEffect(() => {
-    if (svgRef.current && treeNodes.length > 0) {
-      renderMindMap();
-    }
+    if (svgRef.current) renderMindMap();
   }, [treeNodes, currentFocusNodeId, zoom]);
 
   const calculateLayout = (rootNodes: TreeKnowledgeNode[]): NodeLayout[] => {
     const layout: NodeLayout[] = [];
-    let currentY = 50;
-
-    const traverse = (node: TreeKnowledgeNode, depth: number, index: number, parentY?: number) => {
-      const nodeWidth = 120;
-      const nodeHeight = 60;
-      const horizontalSpacing = 200;
-      const verticalSpacing = 80;
-
-      let nodeX, nodeY;
-
-      if (depth === 0) {
-        // 根节点居中显示
-        nodeX = 50;
-        nodeY = currentY;
-        currentY += nodeHeight + verticalSpacing;
-      } else {
-        nodeX = depth * horizontalSpacing + 50;
-        nodeY = parentY! + (index * (nodeHeight + verticalSpacing));
-      }
-
-      const nodeLayout: NodeLayout = {
-        ...node, // 复制所有 TreeKnowledgeNode 属性
-        x: nodeX,
-        y: nodeY,
-        width: nodeWidth,
-        height: nodeHeight
-      };
-
-      layout.push(nodeLayout);
-
-      if (node.children && node.children.length > 0 && node.isExpanded) {
-        node.children.forEach((child, childIndex) => {
-          traverse(child, depth + 1, childIndex, nodeY);
-        });
-      }
+    const nodeWidth = 230;
+    const horizontalSpacing = 145;
+    const verticalSpacing = 28;
+    const lineCapacity = 16;
+    const nodeHeight = (node: TreeKnowledgeNode) => {
+      const lines = Math.max(1, Math.ceil(Array.from(node.title || '').length / lineCapacity));
+      return Math.max(72, 42 + lines * 18);
+    };
+    const childrenOf = (node: TreeKnowledgeNode) =>
+      node.isExpanded ? (node.children ?? []) : [];
+    const subtreeHeight = (node: TreeKnowledgeNode): number => {
+      const children = childrenOf(node);
+      if (!children.length) return nodeHeight(node);
+      return Math.max(nodeHeight(node), children.reduce((sum, child) => sum + subtreeHeight(child), 0)
+        + verticalSpacing * (children.length - 1));
     };
 
-    rootNodes.forEach((node, index) => {
-      traverse(node, 0, index);
+    const place = (node: TreeKnowledgeNode, depth: number, top: number) => {
+      const height = nodeHeight(node);
+      const children = childrenOf(node);
+      const childrenHeight = children.length
+        ? children.reduce((sum, child) => sum + subtreeHeight(child), 0) + verticalSpacing * (children.length - 1)
+        : 0;
+      const y = top + Math.max(0, (childrenHeight - height) / 2);
+      layout.push({ ...node, x: 50 + depth * (nodeWidth + horizontalSpacing), y, width: nodeWidth, height });
+      let childTop = top + Math.max(0, (height - childrenHeight) / 2);
+      children.forEach(child => {
+        place(child, depth + 1, childTop);
+        childTop += subtreeHeight(child) + verticalSpacing;
+      });
+    };
+
+    let rootTop = 50;
+    rootNodes.forEach(node => {
+      place(node, 0, rootTop);
+      rootTop += subtreeHeight(node) + verticalSpacing;
     });
 
     return layout;
@@ -318,21 +319,35 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       // 节点标题 - 添加元数据信息
       const titleText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       titleText.setAttribute('x', (node.width / 2).toString());
-      titleText.setAttribute('y', (node.height / 2 - 8).toString());
+      titleText.setAttribute('y', '22');
       titleText.setAttribute('text-anchor', 'middle');
       titleText.setAttribute('fill', isFocused ? 'white' : '#334155');
       titleText.setAttribute('font-size', '12');
       titleText.setAttribute('font-weight', '600');
-      titleText.textContent = node.title;
+      titleText.setAttribute('pointer-events', 'none');
+      const titleChars = Array.from(node.title || '');
+      const titleLines = titleChars.reduce<string[]>((lines, character) => {
+        const last = lines[lines.length - 1];
+        if (!last || Array.from(last).length >= 16) lines.push(character);
+        else lines[lines.length - 1] = last + character;
+        return lines;
+      }, []);
+      titleLines.forEach((line, index) => {
+        const span = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+        span.setAttribute('x', (node.width / 2).toString());
+        span.setAttribute('dy', index === 0 ? '0' : '16');
+        span.textContent = line;
+        titleText.appendChild(span);
+      });
 
       // 节点元数据（难度、时间）
       const metaText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       metaText.setAttribute('x', (node.width / 2).toString());
-      metaText.setAttribute('y', (node.height / 2 + 8).toString());
+      metaText.setAttribute('y', (node.height - 12).toString());
       metaText.setAttribute('text-anchor', 'middle');
       metaText.setAttribute('fill', isFocused ? 'white' : '#6b7280');
       metaText.setAttribute('font-size', '10');
-      metaText.textContent = `importance : ${node.difficulty} `;
+      metaText.textContent = `难度：${node.difficulty || '未设置'}`;
       
       group.appendChild(rect);
       group.appendChild(titleText);
@@ -539,10 +554,10 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
           className="mind-map-svg"
           viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
           preserveAspectRatio="xMidYMid meet"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
           style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
         />
       </div>
