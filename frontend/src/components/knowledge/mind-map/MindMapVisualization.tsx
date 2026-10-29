@@ -27,9 +27,12 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{x: number; y: number; node: TreeKnowledgeNode} | null>(null);
   const [expansionError, setExpansionError] = useState<{nodeId: number; treeId: number; message: string} | null>(null);
+  const [learningError, setLearningError] = useState('');
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 1000, height: 600 });
   const [isDragging, setIsDragging] = useState(false);
   const panPoint = useRef<{ x: number; y: number } | null>(null);
+  const lastCenteredNodeId = useRef<number | null>(null);
+  const lastRevealVersion = useRef(0);
   const [zoom, setZoom] = useState(1);
   
   const {
@@ -39,7 +42,9 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     setFocusNode,
     getCurrentTreeNodes,
     expandNode,
-    toggleNodeExpansion  
+    toggleNodeExpansion,
+    markNodeLearned,
+    revealVersion,
   } = useKnowledgeStore();
 
   const treeNodes = getCurrentTreeNodes();
@@ -48,6 +53,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   useEffect(() => {
     setViewBox({ x: 0, y: 0, width: 1000, height: 600 });
     setZoom(1);
+    lastCenteredNodeId.current = null;
   }, [currentTreeId]);
 
   // 自动调整思维导图大小以适应内容
@@ -117,8 +123,12 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   };
 
   useEffect(() => {
+    if (lastRevealVersion.current !== revealVersion) {
+      lastCenteredNodeId.current = null;
+      lastRevealVersion.current = revealVersion;
+    }
     if (svgRef.current) renderMindMap();
-  }, [treeNodes, currentFocusNodeId, zoom]);
+  }, [treeNodes, currentFocusNodeId, zoom, revealVersion]);
 
   const calculateLayout = (rootNodes: TreeKnowledgeNode[]): NodeLayout[] => {
     const layout: NodeLayout[] = [];
@@ -281,6 +291,27 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       }
       group.classList.add(`importance-${importance}`);
 
+      {
+        const learnedBadge = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        const badge = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        badge.setAttribute('cx', (node.width - 15).toString());
+        badge.setAttribute('cy', '15');
+        badge.setAttribute('r', '8');
+        badge.setAttribute('fill', node.is_learned ? '#059669' : 'white');
+        badge.setAttribute('stroke', node.is_learned ? '#059669' : '#94a3b8');
+        badge.setAttribute('stroke-width', '1.5');
+        const check = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        check.setAttribute('x', (node.width - 15).toString());
+        check.setAttribute('y', '19');
+        check.setAttribute('text-anchor', 'middle');
+        check.setAttribute('fill', 'white');
+        check.setAttribute('font-size', '12');
+        if (node.is_learned) check.textContent = '✓';
+        learnedBadge.append(badge);
+        if (node.is_learned) learnedBadge.appendChild(check);
+        group.appendChild(learnedBadge);
+      }
+
       //// 根据节点属性设置颜色
       let nodeColor = 'white';
       let borderColor = '#cbd5e1';
@@ -405,10 +436,18 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     
     const layout = calculateLayout(rootNodes);
     const optimalViewBox = calculateOptimalViewBox(layout);
-    
-    // 首次渲染时设置最佳视图
-    if (viewBox.width === 1000 && viewBox.height === 600) {
-      setViewBox(optimalViewBox);
+
+    const isInitialView = viewBox.width === 1000 && viewBox.height === 600;
+    const focusedNode = layout.find(node => node.id === currentFocusNodeId);
+    if (isInitialView) setViewBox(optimalViewBox);
+    if (focusedNode && lastCenteredNodeId.current !== focusedNode.id) {
+      const base = isInitialView ? optimalViewBox : viewBox;
+      setViewBox({
+        ...base,
+        x: focusedNode.x + focusedNode.width / 2 - base.width / 2,
+        y: focusedNode.y + focusedNode.height / 2 - base.height / 2,
+      });
+      lastCenteredNodeId.current = focusedNode.id;
     }
     
     drawConnections(svg, layout);
@@ -458,6 +497,8 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     setZoom(1);
   };
 
+  const focusedNode = treeNodes.find(node => node.id === currentFocusNodeId);
+
   if (!tree) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -487,6 +528,16 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
             onClick={() => { if (currentFocusNodeId !== null) onEditNode(currentFocusNodeId); }}
             className="mt-soft-button px-4 py-1.5 text-sm disabled:opacity-40">
             编辑选中节点
+          </button>
+          <button type="button" disabled={!focusedNode}
+            onClick={() => {
+              if (!focusedNode) return;
+              setLearningError('');
+              void markNodeLearned(focusedNode.id, !focusedNode.is_learned)
+                .catch(error => setLearningError(error instanceof Error ? error.message : '请重试'));
+            }}
+            className="mt-soft-button px-4 py-1.5 text-sm disabled:opacity-40">
+            {focusedNode?.is_learned ? '标记为未学习' : '标记为已学习'}
           </button>
           <div className="flex items-center gap-3 text-sm text-gray-600">
             {/* 缩放控制按钮 */}
@@ -536,6 +587,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
           </button>
         </div>
       )}
+      {learningError && <div role="alert" className="mt-2 text-sm text-red-700">学习状态保存失败：{learningError}</div>}
     </div>
 
     
