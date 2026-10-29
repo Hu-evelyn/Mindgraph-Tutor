@@ -72,6 +72,14 @@ body {
   z-index: 20;
 }
 
+/* The knowledge workspace header grows with wrapped titles and controls instead of overlapping the graph below it. */
+.knowledge-map-header {
+  height: auto;
+  min-height: 132px;
+  justify-content: flex-start;
+  overflow: visible;
+}
+
 /* 分隔线：透明热区叠在面板上，不显示两侧浅色带，也不产生额外的横向宽度。 */
 .mt-resize-handle {
   background: transparent;
@@ -102,6 +110,11 @@ body {
   .mt-main-header {
     height: 182px;
   }
+
+  .knowledge-map-header {
+    height: auto;
+    min-height: 182px;
+  }
 }
 
 @media (max-width: 760px) {
@@ -112,6 +125,11 @@ body {
 
   .mt-main-header {
     height: 230px;
+  }
+
+  .knowledge-map-header {
+    height: auto;
+    min-height: 230px;
   }
 }
 

@@ -111,10 +111,18 @@ export const knowledgeApi = {
       method: 'DELETE',
     }),
 
-  // 标记节点为已学习（需要后端支持）
-  markAsLearned: (nodeId: number) =>
-    apiRequest<{ success: boolean }>('/mark-learned', {
+  // 显式保存节点学习状态，避免重复点击时前后端状态不同步。
+  markAsLearned: (nodeId: number, isLearned: boolean) =>
+    apiRequest<{ success: boolean; is_learned: boolean }>('/mark-learned', {
       method: 'POST',
-      body: { nodeId } as any,
+      body: { nodeId, isLearned } as any,
+    }),
+  importTree: (graph: unknown) =>
+    apiRequest<{ success: boolean; treeId: number }>('/import-tree', {
+      method: 'POST', body: JSON.stringify(graph),
+    }),
+  importDocument: (payload: { fileName: string; content?: string; pdfBase64?: string }) =>
+    apiRequest<{ success: boolean; treeId: number; title: string }>('/import-document', {
+      method: 'POST', body: JSON.stringify(payload),
     }),
 };

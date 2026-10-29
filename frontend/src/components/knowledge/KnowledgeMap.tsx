@@ -1,36 +1,82 @@
 //主容器
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useKnowledgeStore } from '../../stores/useKnowledgeStore';
 import { KnowledgeTree } from './KnowledgeTree';
 import { MindMapVisualization } from './mind-map/MindMapVisualization';
 import { KnowledgeViewSwitcher, type KnowledgeViewMode } from './KnowledgeViewSwitcher';
 import { KnowledgeNodeSearch } from './KnowledgeNodeSearch';
 import { NodeEditDialog } from './NodeEditDialog';
+import { LearningPath } from './LearningPath';
+import { KnowledgeFileActions } from './KnowledgeFileActions';
 import type { TreeKnowledgeNode } from '../../types';
 
 // 帮助信息组件
 const HelpTooltip: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [position, setPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const updatePosition = useCallback(() => {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const gap = 12;
+    const edge = 12;
+    const width = Math.min(360, window.innerWidth - edge * 2);
+    const rightLeft = rect.right + gap;
+    const left = rightLeft + width <= window.innerWidth - edge
+      ? rightLeft
+      : Math.max(edge, rect.left - width - gap);
+    const maxHeight = Math.max(180, window.innerHeight - edge * 2);
+    const top = Math.min(Math.max(edge, rect.top), window.innerHeight - maxHeight - edge);
+    setPosition({ top, left, width, maxHeight });
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updatePosition();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isOpen, updatePosition]);
 
   return (
-    <div className="relative">
+    <div>
       {/* 帮助按钮 */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        ref={buttonRef}
+        onClick={() => setIsOpen(open => !open)}
         className="mt-soft-button w-8 h-8 flex items-center justify-center rounded-full text-sm"
         title="查看帮助"
+        aria-label="查看知识图谱帮助"
+        aria-expanded={isOpen}
       >
         ?
       </button>
 
       {/* 帮助内容 */}
-      {isOpen && (
-        <div className="mt-surface absolute top-full right-0 mt-2 w-80 z-50 p-4">
+      {isOpen && position && createPortal(
+        <div
+          role="dialog"
+          aria-label="知识关系说明"
+          className="mt-surface fixed z-[1000] overflow-y-auto p-4 shadow-2xl"
+          style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}
+        >
           <div className="flex justify-between items-start mb-3">
             <h3 className="font-semibold text-gray-800">知识关系说明</h3>
             <button
+              type="button"
               onClick={() => setIsOpen(false)}
-              className="text-gray-400 hover:text-gray-600"
+              className="ml-3 text-gray-400 hover:text-gray-600"
+              aria-label="关闭帮助"
             >
               ×
             </button>
@@ -102,7 +148,8 @@ const HelpTooltip: React.FC = () => {
               </ul>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -114,7 +161,8 @@ export const KnowledgeMap: React.FC = () => {
   
   const { 
     currentTree, 
-    setFocusNode, 
+    setFocusNode,
+    revealNode,
     currentTreeId,
     getCurrentTreeNodes,
     updateNode,
@@ -124,6 +172,8 @@ export const KnowledgeMap: React.FC = () => {
   const tree = currentTree();
   const treeNodes = getCurrentTreeNodes();
   const editingNode = treeNodes.find(node => node.id === editingNodeId);
+  const learnedCount = treeNodes.filter(node => node.is_learned).length;
+  const progress = treeNodes.length ? Math.round(learnedCount / treeNodes.length * 100) : 0;
 
   // 切换知识树时关闭旧节点的编辑框，避免误把内容保存到新的学习主题。
   useEffect(() => setEditingNodeId(null), [currentTreeId]);
@@ -199,26 +249,39 @@ export const KnowledgeMap: React.FC = () => {
   return (
     // 视觉统一：主题标题、视图工具和内容区采用同一工作台层级。
     <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-      {/* 顶部对齐：主题栏固定在工作台栏下方，搜索框占第二行；原视图切换功能保持不变。 */}
-      <div className="mt-panel-header mt-main-header flex shrink-0 flex-col justify-center px-6 py-3 border-b min-w-0">
-        <div className="flex flex-wrap justify-between items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-2xl font-bold tracking-tight text-[var(--mt-ink)] break-words [overflow-wrap:anywhere]">{tree.root_topic}</h2>
+      {/* 标题、视图操作和检索分区排列，长主题不会挤占按钮空间。 */}
+      <div className="mt-panel-header mt-main-header knowledge-map-header flex shrink-0 flex-col px-6 py-5 border-b min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
+          <div className="min-w-0 flex-1 basis-72">
+            <h2 className="text-xl md:text-2xl font-bold tracking-tight text-[var(--mt-ink)] break-words [overflow-wrap:anywhere]">{tree.root_topic}</h2>
             <p className="mt-muted text-sm mt-1">
-              共 {treeNodes.length} 个节点 • 当前视图: {currentView === 'tree' ? '树状列表' : '思维导图'}
+              共 {treeNodes.length} 个节点 <span className="mx-1 text-slate-300">•</span>
+              当前视图：{currentView === 'tree' ? '树状列表' : '思维导图'}
               {isLoading && ' • 加载中...'}
             </p>
           </div>
-          <div className="flex items-center gap-4">
-            <HelpTooltip />
-            <KnowledgeViewSwitcher
-              currentView={currentView}
-              onViewChange={setCurrentView}
-            />
+          <div className="w-full max-w-56 shrink-0" aria-label={`已学习 ${learnedCount} 个，共 ${treeNodes.length} 个节点`}>
+            <div className="mb-1.5 flex justify-between text-xs text-slate-500">
+              <span>学习进度</span><span>{learnedCount}/{treeNodes.length} · {progress}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-200" role="progressbar"
+              aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+              <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progress}%` }} />
+            </div>
           </div>
         </div>
-        <div className="mt-3">
-          <KnowledgeNodeSearch key={tree.id} nodes={treeNodes} onSelect={setFocusNode} />
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <KnowledgeFileActions tree={tree} nodes={treeNodes} />
+            <HelpTooltip />
+          </div>
+          <div className="flex max-w-full flex-wrap items-center gap-2">
+            <KnowledgeViewSwitcher currentView={currentView} onViewChange={setCurrentView} />
+          </div>
+        </div>
+        <div className="mt-4 flex w-full flex-wrap items-center gap-3">
+          <KnowledgeNodeSearch key={tree.id} nodes={treeNodes} onSelect={revealNode} />
+          <LearningPath nodes={treeNodes} onSelect={revealNode} />
         </div>
       </div>
 
