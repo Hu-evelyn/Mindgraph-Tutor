@@ -1,16 +1,12 @@
 import { useState } from 'react';
 import { useKnowledgeStore } from '../../stores/useKnowledgeStore';
-import { ChevronDoubleLeftIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 interface SessionListProps {
-  onToggleCollapse?: () => void;
-  isCollapsed?: boolean;
+  onBackToLibrary: () => void;
 }
 
-export const SessionList: React.FC<SessionListProps> = ({ 
-  onToggleCollapse, 
-  isCollapsed = false 
-}) => {
+export const SessionList: React.FC<SessionListProps> = ({ onBackToLibrary }) => {
   const { trees, currentTreeId, setCurrentTree, createNewTree, isLoading, deleteTree } = useKnowledgeStore();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,15 +51,18 @@ export const SessionList: React.FC<SessionListProps> = ({
       {/* 头部区域 */}
       {/* 顶部对齐：56px 标题栏和下方操作区与中、右两列形成相同的两条水平线。 */}
       <div className="mt-panel-header mt-sidebar-header flex-shrink-0 border-b flex flex-col">
-        <div className="mt-topbar h-14 px-4 border-b flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-[var(--mt-ink)]">知识树</h1>
+        <div className="mt-topbar h-14 px-4 border-b flex items-center gap-3">
+          {/* 返回知识库的入口移到左侧栏顶部；边栏折叠按钮统一放到中间面板。 */}
           <button
-            onClick={onToggleCollapse}
-            className="mt-soft-button p-1.5"
-            title="隐藏边栏"
+            type="button"
+            onClick={onBackToLibrary}
+            className="mt-soft-button w-8 h-8 flex items-center justify-center"
+            title="返回知识库"
+            aria-label="返回知识库"
           >
-            <ChevronDoubleLeftIcon className="w-4 h-4 text-gray-600" />
+            <ArrowLeftIcon className="w-4 h-4" />
           </button>
+          <h1 className="text-lg font-semibold text-[var(--mt-ink)]">知识树</h1>
         </div>
         <div className="flex-1 px-4 py-3 flex flex-col justify-center">
           {/* 搜索框 */}

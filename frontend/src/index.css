@@ -278,6 +278,24 @@ body {
   box-shadow: 0 4px 18px rgba(35, 60, 105, 0.04);
 }
 
+/* 笔记标题采用相对正文的比例，底部字号按钮调整时整篇笔记会一起缩放。 */
+.mt-note-markdown h1 { font-size: 1.45em; }
+.mt-note-markdown h2 { font-size: 1.28em; }
+.mt-note-markdown h3 { font-size: 1.12em; }
+.mt-note-markdown h4 { font-size: 1em; }
+
+/* KaTeX 继续跟随笔记正文缩放，行内公式略大于文字以保持可读性。 */
+.mt-note-markdown .katex {
+  font-size: 1.1em;
+}
+
+/* 笔记中的长块公式在卡片内横向滚动，避免撑宽右侧面板。 */
+.mt-note-markdown .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 .mt-chat-bubble {
   border: 1px solid var(--mt-border);
   border-radius: 14px;
@@ -286,6 +304,13 @@ body {
 .mt-chat-bubble-assistant {
   background: #f4f7fb;
   color: var(--mt-ink);
+}
+
+/* AI 回复中的长公式留在消息气泡内滚动，避免撑开右侧对话卡片。 */
+.mt-chat-bubble-assistant .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .mt-chat-bubble-user {

@@ -25,6 +25,7 @@ export interface DbKnowledgeNode {
   content: string;
   is_learned: boolean;
   children_generated?: number;
+  note_is_manual?: number; // 手工保存的笔记不再触发自动生成
   relation_type?: string;      
   importance?: string;          
   difficulty?: string;          

@@ -20,7 +20,7 @@
     "express": "^5.1.0",
     "openai": "^5.22.0",
     "pdfjs-dist": "^6.4.299",
-    "sqlite3": "^6.0.1",
+    "sqlite3": "6.0.1",
     "undici": "^8.12.3"
   },
   "devDependencies": {

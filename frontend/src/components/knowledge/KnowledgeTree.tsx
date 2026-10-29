@@ -7,9 +7,11 @@ import { buildTreeStructure } from '../../utils/knowledgeTreeUtils'; // 导入�
 // 修改组件接口
 interface KnowledgeTreeProps {
   onNodeClick?: (node: TreeKnowledgeNode) => void;
+  onEditNode: (nodeId: number) => void;
 }
 export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({ 
-  onNodeClick 
+  onNodeClick,
+  onEditNode,
 })=> {
   const { 
     currentTreeId, 
@@ -89,6 +91,7 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
             totalSiblings={structuredNodes.length}
             currentFocusNodeId={currentFocusNodeId} // 传递焦点节点ID
             onNodeClick={handleNodeClick}
+            onEditNode={onEditNode}
             onToggleExpand={handleToggleExpand} // 传入展开/收缩处理函数
           />
           ))}
