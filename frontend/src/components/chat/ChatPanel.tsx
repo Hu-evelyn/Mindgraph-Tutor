@@ -10,45 +10,49 @@ import { BrandGraphIcon } from '../ui/BrandGraphIcon';
 import { ResizablePanelGroup } from '../ui/ResizablePanelGroup';
 import { ConversationPanel } from './ConversationPanel';
 import { NoteEditPanel } from './NoteEditPanel';
+import { LearningPath } from '../knowledge/LearningPath';
 
 // 按参考图设置默认比例：详情约占四分之三、提问区约占四分之一；仍可拖动调整。
 const RIGHT_PANEL_INITIAL_SIZES = [75, 25];
 // 首次提问后为回答留出更多空间；只扩大到至少 40%，之后仍可手动拖动分界。
 const CHAT_EXPANDED_PERCENT = 40;
 
-// 笔记默认比原有 prose-sm 略小；字号选择保存在浏览器中，切换节点或刷新后仍沿用。
-const NOTE_FONT_SIZE_KEY = 'mt-note-font-size';
-const NOTE_FONT_SIZE_DEFAULT = 13;
-const NOTE_FONT_SIZE_MIN = 11;
-const NOTE_FONT_SIZE_MAX = 20;
+// 笔记以 15px 为 100%，每次调整 10%，范围 20%–300%；百分比单独存储以免误读旧的 px 设置。
+const NOTE_FONT_BASE_PX = 15;
+const NOTE_FONT_PERCENT_KEY = 'mt-note-font-percent';
+const NOTE_FONT_PERCENT_DEFAULT = 100;
+const NOTE_FONT_PERCENT_MIN = 20;
+const NOTE_FONT_PERCENT_MAX = 300;
+const NOTE_FONT_PERCENT_STEP = 10;
 
 // 笔记中的行内 \frac 过于紧凑，会使分母贴近分数线；只在渲染时采用间距更大的 \dfrac。
 // 不修改已保存的笔记文本，公式的整体字号仍由 index.css 中的 .mt-note-markdown .katex 控制。
 const NOTE_KATEX_OPTIONS = { macros: { '\\frac': '\\dfrac' } };
 
 export const ChatPanel: React.FC = () => {
-  const { currentFocusNode, currentTree, noteLoading, noteErrors, generateNote, updateNode } = useKnowledgeStore();
+  const { currentFocusNode, currentTree, getCurrentTreeNodes, revealNode, noteLoading, noteErrors, generateNote, updateNode } = useKnowledgeStore();
   const [hasStartedConversation, setHasStartedConversation] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
-  const [noteFontSize, setNoteFontSize] = useState(() => {
+  const [noteFontPercent, setNoteFontPercent] = useState(() => {
     try {
-      const saved = Number(window.localStorage.getItem(NOTE_FONT_SIZE_KEY));
-      return Number.isInteger(saved) && saved >= NOTE_FONT_SIZE_MIN && saved <= NOTE_FONT_SIZE_MAX
-        ? saved : NOTE_FONT_SIZE_DEFAULT;
+      const saved = Number(window.localStorage.getItem(NOTE_FONT_PERCENT_KEY));
+      return Number.isInteger(saved) && saved >= NOTE_FONT_PERCENT_MIN && saved <= NOTE_FONT_PERCENT_MAX
+        ? saved : NOTE_FONT_PERCENT_DEFAULT;
     } catch {
-      return NOTE_FONT_SIZE_DEFAULT;
+      return NOTE_FONT_PERCENT_DEFAULT;
     }
   });
   useEffect(() => {
     // 浏览器禁用本地存储时仍可在当前页面调整字号。
     try {
-      window.localStorage.setItem(NOTE_FONT_SIZE_KEY, String(noteFontSize));
+      window.localStorage.setItem(NOTE_FONT_PERCENT_KEY, String(noteFontPercent));
     } catch {
       // 忽略存储限制，保留当前组件中的字号状态。
     }
-  }, [noteFontSize]);
+  }, [noteFontPercent]);
   const focusNode = currentFocusNode();
   const tree = currentTree();
+  const treeNodes = getCurrentTreeNodes();
   // 切换知识节点时退出旧笔记的编辑状态，避免在新节点上显示旧草稿。
   useEffect(() => setEditingNoteId(null), [focusNode?.id]);
 
@@ -58,13 +62,18 @@ export const ChatPanel: React.FC = () => {
       {/* 头部显示当前节点信息 */}
       {/* 顶部对齐：详情区也分成 56px 标题栏和节点标题区，与左、中两列的线对齐。 */}
       <div className="mt-panel-header mt-detail-header border-b flex-shrink-0 flex flex-col">
-        <div className="mt-topbar h-14 px-5 border-b flex items-center">
+        <div className="mt-topbar h-14 px-5 border-b flex items-center gap-3">
           <p className="mt-kicker">知识点详情</p>
         </div>
         <div className="flex-1 px-5 py-4">
-          <h3 className="font-semibold text-lg text-[var(--mt-ink)]">
-            {focusNode ? focusNode.label : (tree?.root_topic || 'AI学习助手')}
-          </h3>
+          {/* 学习路径紧邻当前节点或知识树标题，切换主题后仍在标题右侧。 */}
+          <div className="flex min-w-0 items-center gap-3">
+            {/* 右侧当前标题与中间面板主题标题使用同一字号。 */}
+            <h3 className="min-w-0 font-bold text-xl md:text-2xl tracking-tight text-[var(--mt-ink)] break-words">
+              {focusNode ? focusNode.label : (tree?.root_topic || 'AI学习助手')}
+            </h3>
+            {tree && <div className="shrink-0"><LearningPath nodes={treeNodes} onSelect={revealNode} /></div>}
+          </div>
           {focusNode?.content && (
             <p className="mt-muted text-xs mt-1">
               节点内容 ({focusNode.content.length} 字符)
@@ -106,7 +115,7 @@ export const ChatPanel: React.FC = () => {
             <div className="flex-1 overflow-auto p-5">
               {/* 正文、标题和公式共用可调字号；只作用于笔记内容，不改动原始 Markdown。 */}
               {focusNode.content ? (
-                <div className="prose prose-sm max-w-none mt-note-markdown" style={{ fontSize: `${noteFontSize}px` }}>
+                <div className="prose prose-sm max-w-none mt-note-markdown" style={{ fontSize: `${NOTE_FONT_BASE_PX * noteFontPercent / 100}px` }}>
                 {/* 将 $...$ 和独占一行的 $$...$$ 解析并渲染为公式，保留原有 Markdown 样式。 */}
                 <ReactMarkdown
                   remarkPlugins={[remarkMath]}
@@ -155,12 +164,12 @@ export const ChatPanel: React.FC = () => {
                 className="mt-soft-button px-3 py-1.5 text-xs whitespace-nowrap">编辑笔记</button>
               <div className="flex items-center gap-3 flex-shrink-0">
                 <div role="group" aria-label="笔记字号" className="flex items-center gap-1">
-                  <button type="button" onClick={() => setNoteFontSize(size => Math.max(NOTE_FONT_SIZE_MIN, size - 1))}
-                    disabled={noteFontSize === NOTE_FONT_SIZE_MIN} aria-label="缩小笔记字体" title="缩小笔记字体"
+                  <button type="button" onClick={() => setNoteFontPercent(percent => Math.max(NOTE_FONT_PERCENT_MIN, percent - NOTE_FONT_PERCENT_STEP))}
+                    disabled={noteFontPercent === NOTE_FONT_PERCENT_MIN} aria-label="缩小笔记字体" title="缩小笔记字体"
                     className="mt-soft-button w-7 h-7 flex items-center justify-center text-sm disabled:opacity-40">−</button>
-                  <span className="text-xs text-gray-500 tabular-nums min-w-9 text-center" aria-live="polite">{noteFontSize}px</span>
-                  <button type="button" onClick={() => setNoteFontSize(size => Math.min(NOTE_FONT_SIZE_MAX, size + 1))}
-                    disabled={noteFontSize === NOTE_FONT_SIZE_MAX} aria-label="放大笔记字体" title="放大笔记字体"
+                  <span className="text-xs text-gray-500 tabular-nums min-w-10 text-center" aria-live="polite">{noteFontPercent}%</span>
+                  <button type="button" onClick={() => setNoteFontPercent(percent => Math.min(NOTE_FONT_PERCENT_MAX, percent + NOTE_FONT_PERCENT_STEP))}
+                    disabled={noteFontPercent === NOTE_FONT_PERCENT_MAX} aria-label="放大笔记字体" title="放大笔记字体"
                     className="mt-soft-button w-7 h-7 flex items-center justify-center text-sm disabled:opacity-40">+</button>
                 </div>
                 {(focusNode.content ?? '').length > 1000 && (

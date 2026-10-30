@@ -44,7 +44,8 @@ export const KnowledgeNodeSearch: React.FC<KnowledgeNodeSearchProps> = ({ nodes,
 
   return (
     <div
-      className="mt-node-search relative w-full min-w-0 max-w-2xl flex-1 basis-80"
+      // 搜索、帮助和视图切换同排时，搜索框填满其余宽度。
+      className="mt-node-search relative min-w-0 flex-1"
       onFocusCapture={() => setIsOpen(true)}
       onBlurCapture={event => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsOpen(false);

@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { knowledgeApi } from '../../services/api';
+import { KnowledgeFileActions } from '../knowledge/KnowledgeFileActions';
 import type { TutorChatTurn } from '../../services/api';
 
 interface ConversationMessage {
@@ -34,7 +35,7 @@ export function ConversationPanel({ contextKey, contextLabel, hasSelectedNode, t
   const panelRef = useRef<HTMLElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const actionsRef = useRef<HTMLDivElement>(null);
+  const actionsRef = useRef<HTMLButtonElement>(null);
   const messages = messagesByContext[contextKey] ?? [];
   const draft = draftsByContext[contextKey] ?? '';
   const isSending = pendingByContext[contextKey] ?? false;
@@ -49,11 +50,10 @@ export function ConversationPanel({ contextKey, contextLabel, hasSelectedNode, t
     if (!panel || !form || !input || !actions) return;
 
     const formStyle = getComputedStyle(form);
-    const actionsStyle = getComputedStyle(actions);
+    // 移除“AI 助手”标签后，只保留按钮和表单内边距作为固定高度。
     const fixedHeight = actions.offsetHeight
       + parseFloat(formStyle.paddingTop)
-      + parseFloat(formStyle.paddingBottom)
-      + parseFloat(actionsStyle.marginTop);
+      + parseFloat(formStyle.paddingBottom);
     const spaceAfterActions = Math.max(0, panel.clientHeight - fixedHeight);
     const messageSpace = Math.min(48, Math.max(0, spaceAfterActions - 42));
     const maxHeight = Math.max(42, Math.min(160, Math.floor(panel.clientHeight * 0.45), spaceAfterActions - messageSpace));
@@ -176,40 +176,39 @@ export function ConversationPanel({ contextKey, contextLabel, hasSelectedNode, t
 
       <form
         ref={formRef}
-        // 表单贴着卡片底部；输入框增高时只压缩上方消息区，不压缩下方操作行。
+        // 表单贴着卡片底部；输入框增高时只压缩上方消息区，导入与发送按钮保持对齐。
         className="flex flex-col shrink-0 min-h-0 px-4 pt-2 pb-3"
         onSubmit={event => {
           event.preventDefault();
           sendMessage();
         }}
       >
-        <label htmlFor="tutor-chat-input" className="sr-only">输入要向 AI 提出的问题</label>
-        {/* 默认一行；折行后自动增高，达到卡片内的高度上限才显示内部滚动条。 */}
-        <textarea
-          ref={inputRef}
-          id="tutor-chat-input"
-          value={draft}
-          onChange={event => {
-            const value = event.target.value;
-            setDraftsByContext(previous => ({ ...previous, [contextKey]: value }));
-          }}
-          onKeyDown={event => {
-            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              sendMessage();
-            }
-          }}
-          rows={1}
-          maxLength={2000}
-          disabled={treeId === null || isSending}
-          placeholder={treeId === null ? '请先选择知识树' : hasSelectedNode ? `向 AI 提问：${contextLabel}` : '输入你想了解的问题...'}
-          className="mt-input w-full min-h-0 flex-none px-3 py-2 text-sm leading-6 resize-none"
-        />
-        {/* 操作行不随输入框增高而收缩，始终完整显示在卡片底部。 */}
-        <div ref={actionsRef} className="flex shrink-0 items-center justify-between gap-3 mt-1.5">
-          {/* 保持原有操作行布局；发送状态仅控制按钮，不影响卡片拖动和输入框高度。 */}
-          <p className="mt-muted text-xs">AI 助手</p>
-          <button type="submit" disabled={!draft.trim() || treeId === null || isSending} className="mt-primary-button flex items-center gap-1.5 px-3 py-1.5 text-sm flex-shrink-0">
+        {/* 导入、提问输入和发送同排；多行输入只让输入框向上长高。 */}
+        <div className="flex items-end gap-2 min-w-0">
+          <KnowledgeFileActions nodes={[]} mode="import" />
+          <label htmlFor="tutor-chat-input" className="sr-only">输入要向 AI 提出的问题</label>
+          <textarea
+            ref={inputRef}
+            id="tutor-chat-input"
+            value={draft}
+            onChange={event => {
+              const value = event.target.value;
+              setDraftsByContext(previous => ({ ...previous, [contextKey]: value }));
+            }}
+            onKeyDown={event => {
+              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                sendMessage();
+              }
+            }}
+            rows={1}
+            maxLength={2000}
+            disabled={treeId === null || isSending}
+            placeholder={treeId === null ? '请先选择知识树' : hasSelectedNode ? `向 AI 提问：${contextLabel}` : '输入你想了解的问题...'}
+            className="mt-input flex-1 min-w-0 min-h-0 px-3 py-2 text-sm leading-6 resize-none"
+          />
+          <button ref={actionsRef} type="submit" disabled={!draft.trim() || treeId === null || isSending}
+            className="mt-primary-button h-[42px] flex items-center gap-1.5 px-3 text-sm flex-shrink-0">
             <PaperAirplaneIcon className="w-4 h-4" />
             {isSending ? '发送中' : '发送'}
           </button>

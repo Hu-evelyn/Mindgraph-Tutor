@@ -9,6 +9,7 @@ import './MindMapVisualization.css';
 interface MindMapVisualizationProps {
   onNodeClick?: (node: TreeKnowledgeNode) => void;
   onEditNode: (nodeId: number) => void;
+  toolbar: React.ReactNode;
 }
 
 // 扩展 NodeLayout 接口，包含所有必需的属性
@@ -22,6 +23,7 @@ interface NodeLayout extends TreeKnowledgeNode {
 export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({ 
   onNodeClick,
   onEditNode,
+  toolbar,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -107,9 +109,9 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     setIsDragging(false);
   };
 
-  // 滑块缩放处理
+  // 滑块与加减按钮共用 30%–500% 的缩放范围。
   const handleZoomChange = (newZoom: number) => {
-    const clampedZoom = Math.max(0.3, Math.min(3, newZoom));
+    const clampedZoom = Math.max(0.3, Math.min(5, newZoom));
     setZoom(clampedZoom);
   };
 
@@ -476,6 +478,16 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     setContextMenu(null);
   };
 
+  // 右键所指节点直接切换学习状态，不依赖工具栏中当前选中的节点。
+  const handleToggleLearned = () => {
+    if (!contextMenu) return;
+    const { id, is_learned } = contextMenu.node;
+    setContextMenu(null);
+    setLearningError('');
+    void markNodeLearned(id, !is_learned)
+      .catch(error => setLearningError(error instanceof Error ? error.message : '请重试'));
+  };
+
   // 辅助函数：根据关系类型获取颜色
   // 替换原来的 getRelationColor 函数
   function getRelationColor(relationType: string): string {
@@ -497,8 +509,6 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     setZoom(1);
   };
 
-  const focusedNode = treeNodes.find(node => node.id === currentFocusNodeId);
-
   if (!tree) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -514,31 +524,18 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   <div className="mind-map-container" ref={containerRef}>
     {/* 视觉统一：导图工具栏复用柔和按钮样式，缩放及重置处理函数保持不变。 */}
     <div className="mind-map-controls-fixed">
-      <div className="flex justify-between items-center">
+      {/* 两行顺序调整：搜索、帮助、视图切换和导出在上，重置与缩放在下。 */}
+      <div className="flex min-w-0 items-center">{toolbar}</div>
+      <div className="mt-3 flex justify-between items-center gap-3">
     
-        <div className="flex flex-wrap gap-4 items-center">
+        <div className="flex min-w-0 flex-wrap gap-4 items-center">
           <button
             onClick={resetView}
             className="mt-soft-button px-4 py-1.5 text-sm"
           >
             重置视图
           </button>
-          {/* 导图选中节点后可直接编辑；右键菜单也提供同一入口。 */}
-          <button type="button" disabled={currentFocusNodeId === null}
-            onClick={() => { if (currentFocusNodeId !== null) onEditNode(currentFocusNodeId); }}
-            className="mt-soft-button px-4 py-1.5 text-sm disabled:opacity-40">
-            编辑选中节点
-          </button>
-          <button type="button" disabled={!focusedNode}
-            onClick={() => {
-              if (!focusedNode) return;
-              setLearningError('');
-              void markNodeLearned(focusedNode.id, !focusedNode.is_learned)
-                .catch(error => setLearningError(error instanceof Error ? error.message : '请重试'));
-            }}
-            className="mt-soft-button px-4 py-1.5 text-sm disabled:opacity-40">
-            {focusedNode?.is_learned ? '标记为未学习' : '标记为已学习'}
-          </button>
+          {/* 编辑与学习状态操作已移入节点右键菜单，中间工具栏只保留视图控制。 */}
           <div className="flex items-center gap-3 text-sm text-gray-600">
             {/* 缩放控制按钮 */}
             <div className="mt-view-switcher flex items-center gap-1 p-1">
@@ -565,7 +562,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
               <input
                 type="range"
                 min="30"
-                max="300"
+                max="500"
                 value={zoom * 100}
                 onChange={(e) => handleZoomChange(parseInt(e.target.value) / 100)}
                 className="w-24 accent-[var(--mt-accent)]"
@@ -628,6 +625,8 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
         onClose={() => setContextMenu(null)}
         onExpand={handleExpandNode}
         onEdit={() => { onEditNode(contextMenu.node.id); setContextMenu(null); }}
+        isLearned={Boolean(contextMenu.node.is_learned)}
+        onToggleLearned={handleToggleLearned}
       />
     )}
   </div>
