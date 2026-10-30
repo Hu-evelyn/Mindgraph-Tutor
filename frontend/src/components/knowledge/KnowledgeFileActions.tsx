@@ -7,6 +7,8 @@ import { downloadMindmapSvg, downloadTreePdf } from './knowledgeGraphExport';
 interface KnowledgeFileActionsProps {
   tree?: KnowledgeTree;
   nodes: DbKnowledgeNode[];
+  // 首页仍显示导入；工作台可分别把导入和导出放在对应面板。
+  mode?: 'both' | 'import' | 'export';
 }
 
 function downloadGraph(tree: KnowledgeTree, nodes: DbKnowledgeNode[]) {
@@ -47,7 +49,7 @@ async function fileToBase64(file: File) {
   return btoa(binary);
 }
 
-export function KnowledgeFileActions({ tree, nodes }: KnowledgeFileActionsProps) {
+export function KnowledgeFileActions({ tree, nodes, mode = 'both' }: KnowledgeFileActionsProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [message, setMessage] = useState('');
@@ -85,14 +87,17 @@ export function KnowledgeFileActions({ tree, nodes }: KnowledgeFileActionsProps)
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <input ref={inputRef} type="file" accept=".json,.pdf,.txt,.md" className="sr-only"
-        aria-label="选择要导入的文件" onChange={event => void handleImport(event.target.files?.[0])} />
-      <button type="button" className="mt-soft-button h-10 px-3 text-sm"
-        disabled={isImporting} onClick={() => inputRef.current?.click()}>
-        {isImporting ? '导入中…' : '导入文件'}
-      </button>
-      {tree && <div className="relative">
+    <div className={mode === 'import' ? 'relative shrink-0' : 'flex flex-wrap items-center gap-2'}>
+      {/* 导入入口与提问输入框同排，首页仍沿用原有导入按钮。 */}
+      {mode !== 'export' && <>
+        <input ref={inputRef} type="file" accept=".json,.pdf,.txt,.md" className="sr-only"
+          aria-label="选择要导入的文件" onChange={event => void handleImport(event.target.files?.[0])} />
+        <button type="button" className={`mt-soft-button px-3 text-sm whitespace-nowrap ${mode === 'import' ? 'h-[42px]' : 'h-10'}`}
+          disabled={isImporting} onClick={() => inputRef.current?.click()}>
+          {isImporting ? '导入中…' : '导入文件'}
+        </button>
+      </>}
+      {mode !== 'import' && tree && <div className="relative">
         <button type="button" className="mt-soft-button h-10 px-3 text-sm"
           onClick={() => setExportMenuOpen(open => !open)} disabled={!nodes.length} aria-expanded={exportMenuOpen}>导出图谱 ▾</button>
         {exportMenuOpen && <div className="mt-surface absolute right-0 top-full z-50 mt-2 flex min-w-48 flex-col gap-1 p-2 shadow-xl">
@@ -108,7 +113,10 @@ export function KnowledgeFileActions({ tree, nodes }: KnowledgeFileActionsProps)
             onClick={() => { setExportMenuOpen(false); downloadGraph(tree, nodes); }}>导出 JSON 备份</button>
         </div>}
       </div>}
-      {message && <span role="status" className="mt-muted max-w-56 text-xs">{message}</span>}
+      {/* 对话输入行中的提示悬浮显示，避免导入反馈把输入框或发送按钮挤走。 */}
+      {message && <span role="status" className={mode === 'import'
+        ? 'mt-surface absolute bottom-full left-0 z-20 mb-2 w-56 max-w-[70vw] p-2 text-xs text-[var(--mt-ink)] shadow-lg'
+        : 'mt-muted max-w-56 text-xs'}>{message}</span>}
     </div>
   );
 }

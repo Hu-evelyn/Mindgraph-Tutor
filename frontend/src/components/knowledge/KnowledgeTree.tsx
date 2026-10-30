@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useKnowledgeStore } from '../../stores/useKnowledgeStore';
 import { TreeNode } from './TreeNode';
 import type { TreeKnowledgeNode } from '../../types';
@@ -8,10 +8,12 @@ import { buildTreeStructure } from '../../utils/knowledgeTreeUtils'; // 导入�
 interface KnowledgeTreeProps {
   onNodeClick?: (node: TreeKnowledgeNode) => void;
   onEditNode: (nodeId: number) => void;
+  toolbar: ReactNode;
 }
 export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({ 
   onNodeClick,
   onEditNode,
+  toolbar,
 })=> {
   const { 
     currentTreeId, 
@@ -35,8 +37,16 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
   useEffect(() => {
     if (currentFocusNodeId === null) return;
     requestAnimationFrame(() => {
-      treeScrollRef.current?.querySelector(`[data-node-id="${currentFocusNodeId}"]`)
-        ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      // 只滚动树卡片本身，避免 scrollIntoView 连带移动外层而遮住底框。
+      const container = treeScrollRef.current;
+      const target = container?.querySelector<HTMLElement>(`[data-node-id="${currentFocusNodeId}"]`);
+      if (!container || !target) return;
+      const containerBox = container.getBoundingClientRect();
+      const targetBox = target.getBoundingClientRect();
+      container.scrollTo({
+        top: container.scrollTop + targetBox.top - containerBox.top - (container.clientHeight - targetBox.height) / 2,
+        behavior: 'smooth',
+      });
     });
   }, [currentFocusNodeId, treeNodes]);
   //没则加载页面
@@ -83,9 +93,13 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
   const structuredNodes = buildTreeStructure(treeNodes);
 
   return (
-    // 视觉统一：树列表与首页卡片共用表面样式；节点展开逻辑保持原样。
-    <div className="flex-1 overflow-auto p-6">
-      <div className="max-w-4xl mx-auto">
+    // 树状视图顶部共用完整工具栏；卡片仍只在自身内部滚动。
+    <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+      <div className="shrink-0 flex items-center border-b border-[var(--mt-border)] bg-white px-4 py-3">
+        {toolbar}
+      </div>
+      <div className="flex-1 min-h-0 overflow-hidden p-6 flex flex-col">
+        <div className="max-w-4xl w-full mx-auto flex-1 min-h-0 flex flex-col">
         {/* 树状图容器 */}
         {expansionError && (
           <div role="alert" className="mb-3 text-sm text-red-700">
@@ -93,7 +107,8 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
           </div>
         )}
         {learningError && <div role="alert" className="mb-3 text-sm text-red-700">学习状态保存失败：{learningError}</div>}
-        <div ref={treeScrollRef} className="mt-surface relative max-h-[70vh] overflow-y-auto p-4">
+        {/* 卡片边框固定可见，长树只在卡片内部滚动，与思维导图画布一致。 */}
+        <div ref={treeScrollRef} className="mt-surface relative flex-1 min-h-0 overflow-y-auto p-4">
           {structuredNodes.map((rootNode, index) => (
           <TreeNode
             key={rootNode.id}
@@ -113,14 +128,15 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
             }}
           />
           ))}
+          {/* 空状态也留在固定边框内，不在卡片外增加第二段可滚动高度。 */}
+          {structuredNodes.length === 0 && (
+            <div className="text-center py-12">
+              <div className="text-gray-400 text-6xl mb-4">🌱</div>
+              <p className="text-gray-500">知识树为空，尝试扩展根节点</p>
+            </div>
+          )}
         </div>
-        
-        {structuredNodes.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-gray-400 text-6xl mb-4">🌱</div>
-            <p className="text-gray-500">知识树为空，尝试扩展根节点</p>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );

@@ -6,9 +6,8 @@ import { KnowledgeTree } from './KnowledgeTree';
 import { MindMapVisualization } from './mind-map/MindMapVisualization';
 import { KnowledgeViewSwitcher, type KnowledgeViewMode } from './KnowledgeViewSwitcher';
 import { KnowledgeNodeSearch } from './KnowledgeNodeSearch';
-import { NodeEditDialog } from './NodeEditDialog';
-import { LearningPath } from './LearningPath';
 import { KnowledgeFileActions } from './KnowledgeFileActions';
+import { NodeEditDialog } from './NodeEditDialog';
 import type { TreeKnowledgeNode } from '../../types';
 
 // 帮助信息组件
@@ -142,7 +141,7 @@ const HelpTooltip: React.FC = () => {
               <h4 className="font-medium text-sm text-gray-700 mb-2">操作提示</h4>
               <ul className="text-xs text-gray-600 space-y-1">
                 <li>• 点击节点查看详细内容</li>
-                <li>• 右键节点可扩展知识</li>
+                <li>• 右键节点可编辑、展开或标记学习状态</li>
                 <li>• 拖动视图可移动思维导图</li>
                 <li>• 使用缩放按钮调整大小</li>
               </ul>
@@ -216,22 +215,36 @@ export const KnowledgeMap: React.FC = () => {
   }, [treeNodes, currentView]);
 
 
+  // 两种视图共用同一组控件：搜索、帮助、视图切换依次位于导出图谱左侧。
+  const viewToolbar = tree ? (
+    <div className="flex w-full min-w-0 items-center gap-3">
+      <KnowledgeNodeSearch key={tree.id} nodes={treeNodes} onSelect={revealNode} />
+      <HelpTooltip />
+      <div className="shrink-0">
+        <KnowledgeViewSwitcher currentView={currentView} onViewChange={setCurrentView} />
+      </div>
+      <div className="ml-auto shrink-0">
+        <KnowledgeFileActions tree={tree} nodes={treeNodes} mode="export" />
+      </div>
+    </div>
+  ) : null;
+
   const renderCurrentView = () => {
     console.log(`渲染 ${currentView} 视图，节点数量: ${treeNodes.length}`);
     
     switch (currentView) {
       case 'tree':
-        return <KnowledgeTree onNodeClick={handleNodeClick} onEditNode={setEditingNodeId} />;
+        return <KnowledgeTree onNodeClick={handleNodeClick} onEditNode={setEditingNodeId} toolbar={viewToolbar} />;
       
       case 'mindmap':
         return (
           <div className="flex-1 min-h-0 min-w-0 flex flex-col">
-            <MindMapVisualization onNodeClick={handleNodeClick} onEditNode={setEditingNodeId} />
+            <MindMapVisualization onNodeClick={handleNodeClick} onEditNode={setEditingNodeId} toolbar={viewToolbar} />
           </div>
         );
       
       default:
-        return <KnowledgeTree onNodeClick={handleNodeClick} onEditNode={setEditingNodeId} />;
+        return <KnowledgeTree onNodeClick={handleNodeClick} onEditNode={setEditingNodeId} toolbar={viewToolbar} />;
     }
   };
 
@@ -248,19 +261,14 @@ export const KnowledgeMap: React.FC = () => {
 
   return (
     // 视觉统一：主题标题、视图工具和内容区采用同一工作台层级。
-    <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-      {/* 标题、视图操作和检索分区排列，长主题不会挤占按钮空间。 */}
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden min-w-0">
+      {/* 学习进度移到主题标题下方；保留原有标题区最小高度，避免改变面板分界线位置。 */}
       <div className="mt-panel-header mt-main-header knowledge-map-header flex shrink-0 flex-col px-6 py-5 border-b min-w-0">
-        <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
-          <div className="min-w-0 flex-1 basis-72">
-            <h2 className="text-xl md:text-2xl font-bold tracking-tight text-[var(--mt-ink)] break-words [overflow-wrap:anywhere]">{tree.root_topic}</h2>
-            <p className="mt-muted text-sm mt-1">
-              共 {treeNodes.length} 个节点 <span className="mx-1 text-slate-300">•</span>
-              当前视图：{currentView === 'tree' ? '树状列表' : '思维导图'}
-              {isLoading && ' • 加载中...'}
-            </p>
-          </div>
-          <div className="w-full max-w-56 shrink-0" aria-label={`已学习 ${learnedCount} 个，共 ${treeNodes.length} 个节点`}>
+        <div className="min-w-0">
+          <h2 className="text-xl md:text-2xl font-bold tracking-tight text-[var(--mt-ink)] break-words [overflow-wrap:anywhere]">{tree.root_topic}</h2>
+          {/* 节点数量和当前视图已由内容与切换控件表达，不再在标题下重复显示。 */}
+          {/* 进度区下移 16px，贴近标题区底线；标题区高度仍由原有样式控制。 */}
+          <div className="mt-6 w-full max-w-56" aria-label={`已学习 ${learnedCount} 个，共 ${treeNodes.length} 个节点`}>
             <div className="mb-1.5 flex justify-between text-xs text-slate-500">
               <span>学习进度</span><span>{learnedCount}/{treeNodes.length} · {progress}%</span>
             </div>
@@ -269,19 +277,6 @@ export const KnowledgeMap: React.FC = () => {
               <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progress}%` }} />
             </div>
           </div>
-        </div>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <KnowledgeFileActions tree={tree} nodes={treeNodes} />
-            <HelpTooltip />
-          </div>
-          <div className="flex max-w-full flex-wrap items-center gap-2">
-            <KnowledgeViewSwitcher currentView={currentView} onViewChange={setCurrentView} />
-          </div>
-        </div>
-        <div className="mt-4 flex w-full flex-wrap items-center gap-3">
-          <KnowledgeNodeSearch key={tree.id} nodes={treeNodes} onSelect={revealNode} />
-          <LearningPath nodes={treeNodes} onSelect={revealNode} />
         </div>
       </div>
 

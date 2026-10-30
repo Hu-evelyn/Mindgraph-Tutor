@@ -6,6 +6,8 @@ interface ContextMenuProps {
   onClose: () => void;
   onExpand: () => void;
   onEdit: () => void;
+  isLearned: boolean;
+  onToggleLearned: () => void;
 }
 
 export const ContextMenu: React.FC<ContextMenuProps> = ({
@@ -14,6 +16,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   onClose,
   onExpand,
   onEdit,
+  isLearned,
+  onToggleLearned,
 }) => {
   const handleExpand = () => {
     onExpand();
@@ -35,7 +39,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [onClose]);
 
-// 右键菜单直接列出三个操作，避免让“编辑节点”看起来像展开确认的一部分。
+// 右键菜单集中展示节点操作；学习状态的文字随当前节点状态切换。
   return (
     <div 
       className="context-menu mt-surface fixed z-50 p-4 min-w-64"
@@ -44,8 +48,11 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       <h4 className="font-semibold text-gray-800 mb-3">节点操作</h4>
       <div className="flex flex-wrap gap-2 justify-end">
         <button type="button" onClick={onEdit} className="mt-soft-button px-3 py-1.5 text-sm">编辑节点</button>
-        {/* 三个操作采用同一浅色按钮样式，避免突出其中一个选项。 */}
+        {/* 四个操作采用同一浅色按钮样式，保持菜单视觉统一。 */}
         <button type="button" onClick={handleExpand} className="mt-soft-button px-3 py-1.5 text-sm">展开节点</button>
+        <button type="button" onClick={onToggleLearned} className="mt-soft-button px-3 py-1.5 text-sm">
+          {isLearned ? '标记为未学习' : '标记为已学习'}
+        </button>
         <button type="button" onClick={handleCancel} className="mt-soft-button px-3 py-1.5 text-sm">取消</button>
       </div>
     </div>
