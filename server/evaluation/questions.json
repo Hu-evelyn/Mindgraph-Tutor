@@ -1,0 +1,155 @@
+{
+  "version": 2,
+  "note": "开发集；章节和证据关键词为检索代理标注，不能代替人工逐句引用核查。不得作为知识库资料入库。",
+  "cases": [
+    {
+      "id": "linear",
+      "nodeLabel": "线性回归",
+      "question": "线性回归的输入、输出与平方损失是什么？",
+      "document": "d2l-linear-regression",
+      "heading": "线性回归",
+      "evidence": "平方|均方",
+      "checks": [
+        "区分真实标签和预测值",
+        "给出损失及符号解释"
+      ]
+    },
+    {
+      "id": "likelihood",
+      "nodeLabel": "最大似然与最小二乘",
+      "question": "为什么高斯噪声假设下，最大似然等价于最小二乘？",
+      "document": "d2l-linear-regression",
+      "heading": "正态|线性回归",
+      "evidence": "似然",
+      "checks": [
+        "说明独立同分布高斯噪声和固定方差条件",
+        "解释取负对数后常数项和平方误差"
+      ]
+    },
+    {
+      "id": "softmax",
+      "nodeLabel": "Softmax回归与交叉熵",
+      "question": "类别标签是整数，预测是小数，为什么使用交叉熵损失？",
+      "document": "d2l-softmax-regression",
+      "heading": "softmax|损失|似然",
+      "evidence": "似然|交叉熵",
+      "checks": [
+        "区分标签编码和类别概率",
+        "从类别概率的负对数解释损失"
+      ]
+    },
+    {
+      "id": "overfit",
+      "nodeLabel": "过拟合",
+      "question": "训练误差低、验证误差高说明什么，如何检查？",
+      "document": "d2l-underfit-overfit",
+      "heading": "过拟合|训练|模型选择",
+      "evidence": "泛化|验证|测试",
+      "checks": [
+        "解释泛化差距",
+        "区分验证集和最终测试集"
+      ]
+    },
+    {
+      "id": "ridge",
+      "nodeLabel": "权重衰减与正则化",
+      "question": "L2正则化如何影响目标函数和参数？",
+      "document": "d2l-weight-decay",
+      "heading": "权重|正则|范数",
+      "evidence": "正则|惩罚|范数",
+      "checks": [
+        "给出惩罚项",
+        "不宣称所有参数都会恰好变成零"
+      ]
+    },
+    {
+      "id": "backprop",
+      "nodeLabel": "反向传播",
+      "question": "反向传播与梯度下降分别完成什么工作？",
+      "document": "d2l-backprop",
+      "heading": "反向|训练",
+      "evidence": "链式|梯度",
+      "checks": [
+        "反向传播计算梯度",
+        "优化器使用梯度更新参数"
+      ]
+    },
+    {
+      "id": "sgd",
+      "nodeLabel": "随机梯度下降",
+      "question": "随机梯度下降为何比全批量梯度下降更有噪声？",
+      "document": "d2l-sgd",
+      "heading": "随机梯度",
+      "evidence": "样本|梯度",
+      "checks": [
+        "说明随机样本梯度估计",
+        "不保证每次更新都降低总体损失"
+      ]
+    },
+    {
+      "id": "pca",
+      "nodeLabel": "主成分分析",
+      "question": "PCA的最大方差目标是什么？为什么需要中心化？",
+      "document": "mml",
+      "heading": "10\\.",
+      "evidence": "variance|center|mean",
+      "checks": [
+        "说明中心化及投影方向约束",
+        "解释保留方差而不是分类准确率"
+      ]
+    },
+    {
+      "id": "svm",
+      "nodeLabel": "支持向量机",
+      "question": "软间隔SVM如何权衡间隔与分类违反？",
+      "document": "mml",
+      "heading": "12\\.",
+      "evidence": "slack|soft|margin",
+      "checks": [
+        "说明松弛变量",
+        "解释惩罚系数的权衡"
+      ]
+    },
+    {
+      "id": "gmm",
+      "nodeLabel": "高斯混合模型",
+      "question": "GMM怎样表示多峰分布？混合权重有哪些约束？",
+      "document": "mml",
+      "heading": "11\\.",
+      "evidence": "mixture|Gaussian",
+      "checks": [
+        "权重非负且和为一",
+        "区分混合权重与后验责任度"
+      ]
+    },
+    {
+      "id": "cv",
+      "nodeLabel": "交叉验证",
+      "question": "交叉验证用于什么？为什么不能反复用测试集选模型？",
+      "document": "mml",
+      "heading": "8\\.6",
+      "evidence": "cross.validation|validation",
+      "checks": [
+        "说明模型选择用途",
+        "测试集保留给最终评估"
+      ],
+      "alternatives": [
+        {
+          "document": "d2l-underfit-overfit",
+          "heading": "交叉验证|验证集",
+          "evidence": "验证|测试"
+        }
+      ]
+    },
+    {
+      "id": "negative",
+      "nodeLabel": "秦始皇统一六国",
+      "question": "秦始皇统一六国的先后顺序是什么？",
+      "noEvidence": true,
+      "checks": [
+        "明确资料不覆盖该问题",
+        "不添加机器学习资料引用"
+      ]
+    }
+  ]
+}

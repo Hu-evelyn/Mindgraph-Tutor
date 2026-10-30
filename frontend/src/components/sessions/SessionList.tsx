@@ -17,10 +17,10 @@ export const SessionList: React.FC<SessionListProps> = ({ onBackToLibrary }) => 
   );
 
   const handleNewTree = async () => {
-    const topic = prompt('请输入你想学习的主题：');
-    if (topic && topic.trim()) {
-      await createNewTree(topic.trim());
-    }
+    const topic = window.prompt('请输入学习主题，例如：机器学习、数据库、操作系统');
+    if (!topic?.trim()) return;
+    try { await createNewTree(topic.trim()); }
+    catch (error) { alert(error instanceof Error ? error.message : '创建知识树失败'); }
   };
 
   const handleDeleteClick = (treeId: number, e: React.MouseEvent) => {

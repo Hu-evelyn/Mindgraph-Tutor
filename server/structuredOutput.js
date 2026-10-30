@@ -1,5 +1,5 @@
 // 限制单次生成的宽度，防止异常模型输出让知识树一次膨胀过多。
-const MAX_ROOT_CHILDREN = 6;
+const MAX_ROOT_CHILDREN = 10;
 const MAX_EXPAND_CHILDREN = 5;
 const RELATIONS = new Set(['PART_OF', 'RELATED', 'PREREQUISITE', 'LEADS_TO']);
 const IMPORTANCE = new Set(['low', 'medium', 'high']);

@@ -297,10 +297,32 @@ body {
 }
 
 /* 笔记标题采用相对正文的比例，底部字号按钮调整时整篇笔记会一起缩放。 */
-.mt-note-markdown h1 { font-size: 1.45em; }
-.mt-note-markdown h2 { font-size: 1.28em; }
-.mt-note-markdown h3 { font-size: 1.12em; }
-.mt-note-markdown h4 { font-size: 1em; }
+/* 笔记层级由统一样式控制，列表续行对齐正文。 */
+.mt-note-markdown { line-height: 1.85; overflow-wrap: anywhere; color: var(--mt-ink); }
+.mt-note-markdown h1 { font-size: 1.5em; font-weight: 700; }
+.mt-note-markdown h2 {
+  font-size: 1.35em; font-weight: 700; line-height: 1.5;
+  margin: 1.8em 0 .8em; padding-bottom: .4em;
+  border-bottom: 1px solid var(--mt-border);
+}
+.mt-note-markdown > h2:first-child { margin-top: 0; }
+.mt-note-markdown h3 {
+  font-size: 1.16em; font-weight: 650; line-height: 1.6;
+  margin: 1.5em 0 .65em; padding-left: .65em;
+  border-left: 3px solid var(--mt-accent);
+}
+.mt-note-markdown h4 { font-size: 1.04em; font-weight: 650; margin: 1.1em 0 .5em; }
+.mt-note-markdown p { margin: 0 0 .85em; line-height: 1.85; }
+.mt-note-markdown ul, .mt-note-markdown ol {
+  list-style-position: outside; padding-left: 1.6em; margin: .5em 0 1em;
+}
+.mt-note-markdown ul { list-style-type: disc; }
+.mt-note-markdown ol { list-style-type: decimal; }
+.mt-note-markdown li { padding-left: .15em; margin: .4em 0; }
+.mt-note-markdown li > p { margin: .25em 0; }
+.mt-note-markdown li > ul, .mt-note-markdown li > ol { margin: .35em 0 .6em; }
+.mt-note-markdown ul ul { list-style-type: circle; }
+.mt-note-markdown hr { border: 0; border-top: 1px solid var(--mt-border); margin: 1.6em 0 1em; }
 
 /* KaTeX 继续跟随笔记正文缩放，行内公式略大于文字以保持可读性。 */
 .mt-note-markdown .katex {

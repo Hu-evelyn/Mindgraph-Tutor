@@ -1,0 +1,108 @@
+{
+  "id": "machine-learning",
+  "name": "机器学习：基础与模型评估",
+  "documents": [
+    {
+      "id": "d2l-linear-regression",
+      "title": "动手学深度学习",
+      "version": "zh-v2@e6b18ccea71451a55fcd861d7b96fddf2587b09a",
+      "language": "zh",
+      "chapter": "线性回归",
+      "format": "markdown",
+      "file": "linear-regression.md",
+      "source": "https://raw.githubusercontent.com/d2l-ai/d2l-zh/e6b18ccea71451a55fcd861d7b96fddf2587b09a/chapter_linear-networks/linear-regression.md",
+      "url": "https://zh.d2l.ai/chapter_linear-networks/linear-regression.html"
+    },
+    {
+      "id": "d2l-softmax-regression",
+      "title": "动手学深度学习",
+      "version": "zh-v2@e6b18ccea71451a55fcd861d7b96fddf2587b09a",
+      "language": "zh",
+      "chapter": "Softmax回归",
+      "format": "markdown",
+      "file": "softmax-regression.md",
+      "source": "https://raw.githubusercontent.com/d2l-ai/d2l-zh/e6b18ccea71451a55fcd861d7b96fddf2587b09a/chapter_linear-networks/softmax-regression.md",
+      "url": "https://zh.d2l.ai/chapter_linear-networks/softmax-regression.html"
+    },
+    {
+      "id": "d2l-underfit-overfit",
+      "title": "动手学深度学习",
+      "version": "zh-v2@e6b18ccea71451a55fcd861d7b96fddf2587b09a",
+      "language": "zh",
+      "chapter": "模型选择、欠拟合和过拟合",
+      "format": "markdown",
+      "file": "underfit-overfit.md",
+      "source": "https://raw.githubusercontent.com/d2l-ai/d2l-zh/e6b18ccea71451a55fcd861d7b96fddf2587b09a/chapter_multilayer-perceptrons/underfit-overfit.md",
+      "url": "https://zh.d2l.ai/chapter_multilayer-perceptrons/underfit-overfit.html"
+    },
+    {
+      "id": "d2l-weight-decay",
+      "title": "动手学深度学习",
+      "version": "zh-v2@e6b18ccea71451a55fcd861d7b96fddf2587b09a",
+      "language": "zh",
+      "chapter": "权重衰减",
+      "format": "markdown",
+      "file": "weight-decay.md",
+      "source": "https://raw.githubusercontent.com/d2l-ai/d2l-zh/e6b18ccea71451a55fcd861d7b96fddf2587b09a/chapter_multilayer-perceptrons/weight-decay.md",
+      "url": "https://zh.d2l.ai/chapter_multilayer-perceptrons/weight-decay.html"
+    },
+    {
+      "id": "d2l-backprop",
+      "title": "动手学深度学习",
+      "version": "zh-v2@e6b18ccea71451a55fcd861d7b96fddf2587b09a",
+      "language": "zh",
+      "chapter": "前向传播、反向传播和计算图",
+      "format": "markdown",
+      "file": "backprop.md",
+      "source": "https://raw.githubusercontent.com/d2l-ai/d2l-zh/e6b18ccea71451a55fcd861d7b96fddf2587b09a/chapter_multilayer-perceptrons/backprop.md",
+      "url": "https://zh.d2l.ai/chapter_multilayer-perceptrons/backprop.html"
+    },
+    {
+      "id": "d2l-sgd",
+      "title": "动手学深度学习",
+      "version": "zh-v2@e6b18ccea71451a55fcd861d7b96fddf2587b09a",
+      "language": "zh",
+      "chapter": "随机梯度下降",
+      "format": "markdown",
+      "file": "sgd.md",
+      "source": "https://raw.githubusercontent.com/d2l-ai/d2l-zh/e6b18ccea71451a55fcd861d7b96fddf2587b09a/chapter_optimization/sgd.md",
+      "url": "https://zh.d2l.ai/chapter_optimization/sgd.html"
+    },
+    {
+      "id": "islp",
+      "title": "An Introduction to Statistical Learning with Applications in Python",
+      "version": "2023; official website snapshot 2026-10-29",
+      "language": "en",
+      "chapter": "Chapters 3–6: regression, classification, resampling, regularization",
+      "format": "pdf",
+      "file": "ISLP.pdf",
+      "source": "https://hastie.su.domains/ISLP/ISLP_website.pdf",
+      "url": "https://www.statlearning.com/",
+      "chapters": [
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "optional": true
+    },
+    {
+      "id": "mml",
+      "title": "Mathematics for Machine Learning",
+      "version": "2020; official online snapshot 2026-10-29",
+      "language": "en",
+      "chapter": "Chapters 8–12: models, regression, PCA, GMM, SVM",
+      "format": "pdf",
+      "file": "MML.pdf",
+      "source": "https://raw.githubusercontent.com/mml-book/mml-book.github.io/master/book/mml-book.pdf",
+      "url": "https://mml-book.github.io/",
+      "chapters": [
+        "8",
+        "9",
+        "10",
+        "11",
+        "12"
+      ]
+    }
+  ]
+}

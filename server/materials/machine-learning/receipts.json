@@ -1,0 +1,59 @@
+{
+  "retrievedAt": "2026-10-29T03:29:40.764Z",
+  "documents": [
+    {
+      "id": "d2l-linear-regression",
+      "file": "linear-regression.md",
+      "source": "https://raw.githubusercontent.com/d2l-ai/d2l-zh/e6b18ccea71451a55fcd861d7b96fddf2587b09a/chapter_linear-networks/linear-regression.md",
+      "sha256": "47a51fcd59cb40ace26726f87ed73aa91abe1d895d9d8738f191a42df6de7f75",
+      "bytes": 25457
+    },
+    {
+      "id": "d2l-softmax-regression",
+      "file": "softmax-regression.md",
+      "source": "https://raw.githubusercontent.com/d2l-ai/d2l-zh/e6b18ccea71451a55fcd861d7b96fddf2587b09a/chapter_linear-networks/softmax-regression.md",
+      "sha256": "f4cb4e6a80f2de4e76e9ec65d5fd18874f497b6087e07ccf124125a1f952f89d",
+      "bytes": 17385
+    },
+    {
+      "id": "d2l-underfit-overfit",
+      "file": "underfit-overfit.md",
+      "source": "https://raw.githubusercontent.com/d2l-ai/d2l-zh/e6b18ccea71451a55fcd861d7b96fddf2587b09a/chapter_multilayer-perceptrons/underfit-overfit.md",
+      "sha256": "b21c784ece1d264eb654b9bdd699c24ad885f8b7b7967361a28e1fb02c6bd43e",
+      "bytes": 27494
+    },
+    {
+      "id": "d2l-weight-decay",
+      "file": "weight-decay.md",
+      "source": "https://raw.githubusercontent.com/d2l-ai/d2l-zh/e6b18ccea71451a55fcd861d7b96fddf2587b09a/chapter_multilayer-perceptrons/weight-decay.md",
+      "sha256": "799474bb070da33742f6f4564a78e466ebee6e0ea8230f705cc79faa0c8934c8",
+      "bytes": 22035
+    },
+    {
+      "id": "d2l-backprop",
+      "file": "backprop.md",
+      "source": "https://raw.githubusercontent.com/d2l-ai/d2l-zh/e6b18ccea71451a55fcd861d7b96fddf2587b09a/chapter_multilayer-perceptrons/backprop.md",
+      "sha256": "e6b31815c5106ba82553a7656e1cc73aa0a82650aba527714cd2cc490981faa4",
+      "bytes": 9420
+    },
+    {
+      "id": "d2l-sgd",
+      "file": "sgd.md",
+      "source": "https://raw.githubusercontent.com/d2l-ai/d2l-zh/e6b18ccea71451a55fcd861d7b96fddf2587b09a/chapter_optimization/sgd.md",
+      "sha256": "c8ba8de987c1352df4972b89359baa888fe42c4cdf97368dad774ccaf48adc11",
+      "bytes": 16135
+    },
+    {
+      "id": "islp",
+      "status": "unavailable",
+      "source": "https://hastie.su.domains/ISLP/ISLP_website.pdf"
+    },
+    {
+      "id": "mml",
+      "file": "MML.pdf",
+      "source": "https://raw.githubusercontent.com/mml-book/mml-book.github.io/master/book/mml-book.pdf",
+      "sha256": "3f87b70c64a35d30ec4e565b4d5cfd18fe913002d3b3bed44691c7d0838911bc",
+      "bytes": 17565898
+    }
+  ]
+}

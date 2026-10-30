@@ -112,6 +112,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
         if (version !== treeLoadVersion || get().currentTreeId !== treeId) return;
         if (!response.tree) throw new Error('知识树不存在');
         set(state => ({
+          trees: state.trees.map(tree => tree.id === treeId ? { ...tree, ...response.tree } : tree),
           currentTreeNodes: response.nodes.map(node => ({
             ...node,
             is_learned: Boolean(node.is_learned),

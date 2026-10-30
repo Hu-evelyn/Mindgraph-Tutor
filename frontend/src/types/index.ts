@@ -62,6 +62,8 @@ export interface TreeKnowledgeNode {
 
 // 知识树类型（对应后端的 knowledge_trees）
 export interface KnowledgeTree {
+  dataset_id?: string | null;
+  dataset_revision?: number;
   id: number;
   user_id: number;
   root_topic: string;

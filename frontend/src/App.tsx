@@ -37,14 +37,14 @@ function App() {
         <div className="mt-surface p-8 max-w-md w-full">
           <div className="text-center mb-6">
             <div className="text-6xl mb-4">🌳</div>
-            <h1 className="text-3xl font-bold text-[var(--mt-ink)] mb-2">知识树学习助手</h1>
-            <p className="mt-muted">AI驱动的结构化学习平台</p>
+            <h1 className="text-3xl font-bold text-[var(--mt-ink)] mb-2">MindGraph-Tutor</h1>
+            <p className="mt-muted">输入学习主题，构建你的知识树</p>
           </div>
           
           <div className="space-y-4">
             <button
               onClick={async () => {
-                const topic = prompt('请输入你想学习的主题：');
+                const topic = window.prompt('请输入学习主题，例如：机器学习、数据库、操作系统');
                 if (topic && topic.trim()) {
                   try {
                     await createNewTree(topic.trim());
@@ -57,11 +57,11 @@ function App() {
               disabled={isLoading}
               className="mt-primary-button w-full px-6 py-3 font-medium"
             >
-              {isLoading ? 'AI思考中...' : '创建新的知识树'}
+              {isLoading ? 'AI思考中...' : '创建知识树'}
             </button>
             
             <div className="mt-muted text-xs text-center">
-              示例：机器学习、React开发、中国古代史、量子力学...
+              例如：机器学习、数据库、操作系统、自然语言处理
             </div>
             <div className="flex justify-center pt-2">
               <KnowledgeFileActions nodes={[]} />
@@ -83,7 +83,7 @@ function App() {
             <BrandGraphIcon className="mx-auto mb-5" />
             {/* 入口页标题：统一使用产品名称。 */}
             <h1 className="text-4xl font-bold text-[var(--mt-ink)] mb-2">我的MindGraph-Tutor</h1>
-            <p className="mt-muted">选择知识树继续学习，或创建新的主题</p>
+            <p className="mt-muted">选择知识树继续学习</p>
           </div>
 
           {/* 知识树网格列表 */}
@@ -111,7 +111,7 @@ function App() {
             {/* 新建知识树卡片 */}
             <div
               onClick={async () => {
-                const topic = prompt('请输入新的学习主题：');
+                const topic = window.prompt('请输入学习主题，例如：机器学习、数据库、操作系统');
                 if (topic && topic.trim()) {
                   try {
                     await createNewTree(topic.trim());
@@ -125,7 +125,7 @@ function App() {
             >
               <div className="text-3xl mb-2 text-gray-400">+</div>
               <div className="text-gray-600 font-medium">新建知识树</div>
-              <div className="text-xs text-gray-500 mt-2 text-center">创建新的学习主题</div>
+              <div className="text-xs text-gray-500 mt-2 text-center">输入任意学习主题</div>
             </div>
           </div>
 

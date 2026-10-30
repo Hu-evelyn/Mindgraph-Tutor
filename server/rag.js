@@ -1,185 +1,313 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
-const MATERIALS = path.join(__dirname, 'materials');
-const INDEX = path.join(__dirname, '.rag', 'index.json');
-const FORMAT = 1;
-let cachedIndex;
-function normalize(text) {
-  return text.normalize('NFKC').replace(/[\uE000-\uF8FF]/g, ' ')
-    .replace(/(?<=[\p{Script=Han}]) +(?=[\p{Script=Han}])/gu, '')
-    .replace(/[ \t]+/g, ' ').trim();
-}
-function terms(text) {
-  const normalized = normalize(text).toLowerCase();
-  const result = normalized.match(/[a-z][a-z0-9-]*/g) || [];
-  for (const run of normalized.match(/[\p{Script=Han}]+/gu) || []) {
-    for (let i = 0; i < run.length - 1; i++) result.push(run.slice(i, i + 2));
-  }
-  return result;
-}
-const QUERY_EQUIVALENTS = [
-    ['词嵌入', '词向量', 'word embedding'], ['独热', 'one-hot'],
-    ['自注意力', 'self-attention'], ['多头注意力', 'multi-head attention'],
-    ['上下文学习', 'in-context learning'], ['指令微调', 'instruction tuning'],
-    ['分词', '词元化', 'tokenization'], ['词表', 'vocabulary'], ['位置编码', 'positional encoding'],
+const { DATASET } = require('./mlCurriculum');
+const BASE = __dirname, REVISION = 'section-rag-1';
+const ALIASES = [
+    ['线性回归', 'linear regression'], ['逻辑回归', 'logistic回归', 'logistic regression'],
+    ['交叉熵', 'cross entropy', 'cross-entropy'], ['最大似然', 'maximum likelihood'],
+    ['最小二乘', 'least squares'], ['均方误差', 'mean squared error', 'mse'],
+    ['正则化', 'regularization'], ['权重衰减', 'weight decay'], ['岭回归', 'ridge regression'],
+    ['套索回归', 'lasso'], ['过拟合', 'overfitting'], ['欠拟合', 'underfitting'],
+    ['偏差', 'bias'], ['方差', 'variance'], ['交叉验证', 'cross validation', 'cross-validation'],
+    ['梯度下降', 'gradient descent'], ['随机梯度下降', 'stochastic gradient descent', 'sgd'],
+    ['支持向量机', 'support vector machine', 'svm'], ['主成分分析', 'principal component analysis', 'pca'],
+    ['高斯混合模型', 'gaussian mixture model', 'gmm'], ['反向传播', 'backpropagation'],
+    ['决策树', 'decision tree'], ['随机森林', 'random forest'], ['独热编码', 'one-hot'],
+    ['softmax回归', 'softmax regression'], ['训练集', 'training set'], ['测试集', 'test set'],
+    ['验证集', 'validation set'], ['损失函数', 'loss function'], ['概率', 'probability'],
 ];
-function expandQuery(text) {
-  return text + ' ' + QUERY_EQUIVALENTS.filter(g => g.some(s => text.toLowerCase().includes(s))).flat().join(' ');
+const hash = value => createHash('sha256').update(Buffer.isBuffer(value) || typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
+const normalize = text => text.normalize('NFKC').replace(/[ \t]+/g, ' ').trim();
+const compact = text => normalize(text).toLowerCase().replace(/\s/g, '');
+function tokens(text) {
+    const n = normalize(text).toLowerCase(), out = n.match(/[a-z][a-z0-9]*(?:-[a-z0-9]+)*/g) || [];
+    for (const run of n.match(/[\p{Script=Han}]+/gu) || [])
+        for (let i = 0; i < run.length - 1; i++)
+            out.push(run.slice(i, i + 2));
+    return out.filter(t => !['the', 'and', 'for', 'with', 'that', 'this', 'from', 'are', 'can', 'not', 'into', 'will', 'was', 'has', 'have'].includes(t));
 }
-async function manifest() {
-  const names = (await fs.readdir(MATERIALS)).filter(name => /\.pdf$/i.test(name)).sort();
-  return Promise.all(names.map(async file => {
-    const stat = await fs.stat(path.join(MATERIALS, file));
-    return { file, size: stat.size, modified: stat.mtimeMs };
-  }));
+function expandQuery(query) {
+    return query + ' ' + ALIASES.filter(g => g.some(t => /[\p{Script=Han}]/u.test(t) ? compact(query).includes(compact(t)) : new RegExp('(^|[^a-z0-9])' + t + '($|[^a-z0-9])', 'i').test(query))).flat().join(' ');
 }
-async function buildIndex() {
-  const files = await manifest();
-  if (!files.length) throw new Error('materials 中没有 PDF 资料');
-  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const chunks = [], documents = [];
-  for (const entry of files) {
-    const task = getDocument({ data: new Uint8Array(await fs.readFile(path.join(MATERIALS, entry.file))), useSystemFonts: true });
-    let pagesWithText = 0;
-    try {
-      const pdf = await task.promise;
-      for (let page = 1; page <= pdf.numPages; page++) {
-        const data = await (await pdf.getPage(page)).getTextContent();
-        let previousY;
-        const text = normalize(data.items.map(item => {
-          if (!item.str) return '';
-          const y = item.transform?.[5];
-          const prefix = previousY !== undefined && Math.abs(y - previousY) > 3 ? '\n' : ' ';
-          previousY = y;
-          return prefix + item.str + (item.hasEOL ? '\n' : '');
-        }).join(''));
-        if (text.replace(/\s/g, '').length < 40) continue;
-        pagesWithText++;
-        const heading = text.split('\n').find(line => line.trim().length > 2)?.trim().slice(0, 100) || '';
-        let start = 0;
-        while (start < text.length) {
-          let end = Math.min(start + 1600, text.length);
-          if (end < text.length) {
-            const boundary = text.lastIndexOf('\n', end);
-            if (boundary > start + 800) end = boundary;
-          }
-          chunks.push({ file: entry.file, page, heading, text: text.slice(start, end) });
-          if (end === text.length) break;
-          start = end - 160;
+function validId(id) { if (typeof id !== 'string' || !/^[a-z0-9-]+$/.test(id))
+    throw new Error('无效资料集 ID'); if (id !== DATASET) throw new Error('当前演示仅提供机器学习资料'); return id; }
+async function catalog(id) { return JSON.parse(await fs.readFile(path.join(BASE, 'datasets', validId(id) + '.json'), 'utf8')); }
+// 标题建立父节，代码块及独占行公式作为完整块保存。
+function markdownSections(text, doc) {
+    const sections = [], stack = [];
+    let blocks = [], pending = [], fence = null;
+    function block() { if (pending.length)
+        blocks.push(pending.join('\n')); pending = []; }
+    function flush() { block(); if (blocks.length)
+        sections.push({ heading: stack.at(-1) || doc.chapter, headingPath: [doc.title, ...stack], blocks }); blocks = []; }
+    for (const line of text.replace(/\r/g, '').split('\n')) {
+        if (/^\s*(\x60{3,}|~{3,})/.test(line)) {
+            const mark = line.trim()[0];
+            if (fence === mark)
+                fence = null;
+            else if (!fence)
+                fence = mark;
+            pending.push(line);
+            continue;
         }
-      }
-      documents.push({ file: entry.file, pages: pdf.numPages, pagesWithText });
-      console.log(entry.file + ': ' + pagesWithText + '/' + pdf.numPages + ' 页含可检索文字');
-      if (!pagesWithText) throw new Error(entry.file + ' 未提取到文字，需要 OCR');
-    } finally { await task.destroy(); }
-  }
-  const version = createHash('sha256').update(JSON.stringify(chunks)).digest('hex');
-  const index = { format: FORMAT, version, files, documents, chunks };
-  await fs.mkdir(path.dirname(INDEX), { recursive: true });
-  await fs.writeFile(INDEX + '.tmp', JSON.stringify(index), 'utf8');
-  await fs.rename(INDEX + '.tmp', INDEX);
-  cachedIndex = null;
-  return index;
+        if (/^\s*\$\$\s*$/.test(line)) {
+            fence = fence === '$' ? null : fence || '$';
+            pending.push(line);
+            continue;
+        }
+        const h = !fence && line.match(/^(#{1,6})\s+(.+)/);
+        if (h) {
+            flush();
+            stack.length = h[1].length - 1;
+            stack[h[1].length - 1] = h[2];
+            continue;
+        }
+        if (!fence && /^\s*:(label|numref|eqlabel):/.test(line))
+            continue;
+        if (!line.trim() && !fence)
+            block();
+        else
+            pending.push(line);
+    }
+    flush();
+    return sections;
 }
-async function loadIndex() {
-  const stat = await fs.stat(INDEX).catch(() => { throw new Error('课件检索索引不存在，请在 server 目录运行 npm run rag:index'); });
-  const current = await manifest();
-  if (cachedIndex?.modified === stat.mtimeMs) {
-    if (JSON.stringify(current) !== JSON.stringify(cachedIndex.index.files)) throw new Error('课件已变化，请运行 npm run rag:index 更新索引');
-    return cachedIndex.index;
-  }
-  const index = JSON.parse(await fs.readFile(INDEX, 'utf8'));
-  if (index.format !== FORMAT || !Array.isArray(index.chunks)) throw new Error('课件索引格式无效，请重新运行 npm run rag:index');
-  if (JSON.stringify(current) !== JSON.stringify(index.files)) throw new Error('课件已变化，请运行 npm run rag:index 更新索引');
-  const df = new Map();
-  for (const chunk of index.chunks) {
-    chunk.tokens = terms(chunk.text + ' ' + chunk.heading);
-    chunk.counts = new Map();
-    for (const token of chunk.tokens) chunk.counts.set(token, (chunk.counts.get(token) || 0) + 1);
-    for (const token of chunk.counts.keys()) df.set(token, (df.get(token) || 0) + 1);
-  }
-  index.df = df;
-  index.averageLength = index.chunks.reduce((sum, c) => sum + c.tokens.length, 0) / Math.max(1, index.chunks.length);
-  cachedIndex = { modified: stat.mtimeMs, index };
-  return index;
+async function pdfSections(bytes, doc) {
+    const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: true });
+    try {
+        const pdf = await task.promise, marks = [];
+        async function visit(items, parents = []) { for (const item of items || []) {
+            const dest = typeof item.dest === 'string' ? await pdf.getDestination(item.dest) : item.dest;
+            if (dest?.[0] !== undefined) {
+                const page = typeof dest[0] === 'number' ? dest[0] + 1 : await pdf.getPageIndex(dest[0]) + 1;
+                marks.push({ page, title: item.title, path: [...parents, item.title] });
+            }
+            await visit(item.items, [...parents, item.title]);
+        } }
+        await visit(await pdf.getOutline());
+        marks.sort((a, b) => a.page - b.page);
+        const labels = await pdf.getPageLabels(), sections = [], skippedPages = [];
+        let current = null;
+        for (let page = 1; page <= pdf.numPages; page++) {
+            const mark = marks.filter(m => m.page <= page).at(-1), chapter = (mark?.path.find(t => /^\s*(?:chapter\s+)?\d+\b/i.test(t)) || '').match(/^\s*(?:chapter\s+)?(\d+)\b/i)?.[1];
+            if (doc.chapters?.length && !doc.chapters.includes(chapter))
+                continue;
+            const data = await (await pdf.getPage(page)).getTextContent();
+            let y;
+            const text = normalize(data.items.map(item => { const next = item.transform?.[5], br = y !== undefined && Math.abs(next - y) > 3 ? '\n' : ' '; y = next; return br + (item.str || '') + (item.hasEOL ? '\n' : ''); }).join(''));
+            if (text.replace(/\s/g, '').length < 40) {
+                skippedPages.push(page);
+                continue;
+            }
+            const heading = mark?.title || doc.chapter;
+            if (!current || current.heading !== heading) {
+                current = { heading, headingPath: [doc.title, ...(mark?.path || [doc.chapter])], blocks: [], pages: [] };
+                sections.push(current);
+            }
+            current.blocks.push(...text.split(/\n\s*\n/).filter(Boolean).map(t => ({ text: t, page, printedPage: labels?.[page - 1] || null })));
+            current.pages.push(page);
+        }
+        if (!sections.length)
+            throw new Error(doc.id + ': 所选章节没有文字，请检查 PDF 书签或 OCR');
+        return { sections, report: { pages: pdf.numPages, indexedPages: sections.flatMap(s => s.pages), skippedPages, formulaQuality: 'PDF 公式须人工核对，提取文字不保证数学排版完整' } };
+    }
+    finally {
+        await task.destroy();
+    }
 }
-function score(index, chunk, query) {
-  let value = 0;
-  for (const token of new Set(terms(expandQuery(query)))) {
-    const count = chunk.counts.get(token) || 0;
-    if (!count) continue;
-    const frequency = index.df.get(token) || 0;
-    const idf = Math.log(1 + (index.chunks.length - frequency + 0.5) / (frequency + 0.5));
-    value += idf * count * 2.2 / (count + 1.2 * (0.25 + 0.75 * chunk.tokens.length / index.averageLength));
-  }
-  const compact = value => normalize(value).toLowerCase().replace(/\s/g, '');
-  const body = compact(chunk.text);
-  if (body.includes(compact(query))) value += 5;
-  const heading = compact(chunk.heading);
-  const subject = compact(query).replace(/(?:机制|编码|方法|模型)$/u, '');
-  if (subject.length >= 2 && heading.includes(subject)) value += 12;
-  if (/本讲|知识地图|课程|课后思考/.test(chunk.heading) && !/概述|绪论|基础|自然语言处理/.test(query)) value *= 0.25;
-  return value * Math.min(1, Math.max(0.35, chunk.text.replace(/\s/g, '').length / 140));
+function chunkSections(sections, doc) {
+    const chunks = [], parents = [];
+    sections.forEach((s, si) => {
+        const sectionId = doc.id + ':' + si, blocks = s.blocks.map(b => typeof b === 'string' ? { text: b } : b);
+        parents.push({ id: sectionId, headingPath: s.headingPath, blocks });
+        let group = [], length = 0;
+        const emit = () => { if (!group.length)
+            return; const start = group[0].i, end = group.at(-1).i, text = group.map(x => x.text).join('\n\n'); chunks.push({ chunkId: sectionId + ':' + chunks.length, sectionId, startBlock: start, endBlock: end, heading: s.heading, headingPath: s.headingPath, text, page: group.find(x => x.page)?.page || null, pageEnd: [...group].reverse().find(x => x.page)?.page || null, printedPage: group.find(x => x.printedPage)?.printedPage || null, documentId: doc.id, file: doc.file, title: doc.title, edition: doc.version, language: doc.language, url: doc.url }); group = []; length = 0; };
+        blocks.forEach((b, i) => { const pieces = b.text.length > 1800 && !/\$\$|^\s*\x60{3}/m.test(b.text) ? b.text.match(/[^。！？.!?\n]+[。！？.!?\n]*/g) || [b.text] : [b.text]; for (const text of pieces) {
+            if (length + text.length > 1000)
+                emit();
+            group.push({ ...b, text, i });
+            length += text.length;
+        } });
+        emit();
+    });
+    return { chunks, parents };
 }
-// 原始主题须有足够覆盖，不能只靠“格式”“修复”等一个词命中。
-function isRelevant(chunk, query) {
-  if (/本讲主要内容|本讲知识点|本讲小结|课程知识地图|全课程知识地图/.test(chunk.heading)) return false;
-  const compact = text => normalize(text).toLowerCase().replace(/\s/g, '');
-  const body = compact(chunk.text);
-  if (query.includes('文本') && !/文本|语料|文档|网页/.test(body)) return false;
-  const subject = query.replace(/(?:基础|理论|机制|方法)$/u, '').replace(/[与和及、]/g, ' ');
-  const keywords = [...new Set(terms(subject))];
-  if (!keywords.length) return false;
-  const covered = keywords.filter(token => body.includes(token)).length / keywords.length;
-  if (covered >= 0.6) return true;
-  // 中英文等价术语可直接匹配，但不把它拆成泛化的单词。
-  return QUERY_EQUIVALENTS.some(group => group.some(term => compact(query).includes(compact(term)))
-    && group.some(term => body.includes(compact(term))));
+const cache = new Map();
+async function buildIndex(id = DATASET) {
+    const c = await catalog(id), chunks = [], parents = [], documents = [], missing = [];
+    for (const doc of c.documents) {
+        if (path.basename(doc.file) !== doc.file)
+            throw new Error('资料文件名不能包含路径');
+        const bytes = await fs.readFile(path.join(BASE, 'materials', id, doc.file)).catch(e => { if (e.code === 'ENOENT' && doc.optional)
+            return null; throw e; });
+        if (!bytes) {
+            missing.push(doc.id);
+            continue;
+        }
+        const parsed = doc.format === 'markdown' ? { sections: markdownSections(bytes.toString('utf8'), doc), report: {} } : await pdfSections(bytes, doc), split = chunkSections(parsed.sections, doc);
+        chunks.push(...split.chunks);
+        parents.push(...split.parents);
+        documents.push({ ...doc, sha256: hash(bytes), ...parsed.report });
+    }
+    if (!chunks.length)
+        throw new Error('资料集没有可检索正文');
+    const index = { format: 2, datasetId: id, revision: REVISION, catalogHash: hash(c), documents, missing, chunks, parents, fileState: await fileState(c) };
+    index.version = hash(index);
+    await fs.mkdir(path.join(BASE, '.rag'), { recursive: true });
+    const dest = path.join(BASE, '.rag', id + '.json');
+    await fs.writeFile(dest + '.tmp', JSON.stringify(index));
+    await fs.rename(dest + '.tmp', dest);
+    cache.delete(id);
+    return index;
 }
-async function retrieveMaterials({ topic = '', nodeLabel, ancestors = [], children = [] }) {
-  // 此目录当前只用于 NLP 课程，避免将资料强行用于其它课程。
-  if (!/自然语言|\bnlp\b|语言模型|transformer|attention|词嵌入|词向量|分词|预训练|prompt|指令微调/i.test(topic)) {
-    return { version: 'outside-nlp-course', sources: [] };
-  }
-  const index = await loadIndex();
-  const queries = [nodeLabel, ...children.map(child => child.label)];
-  const context = ancestors.slice(-2).join(' ');
-  const candidates = queries.map(query => index.chunks.map((chunk, i) => ({
-    chunk, i, score: score(index, chunk, query) + 0.12 * score(index, chunk, context),
-    direct: score(index, chunk, query),
-  })).filter(item => item.direct >= 4 && isRelevant(item.chunk, query)).sort((a, b) => b.score - a.score));
-  const selected = [], used = new Set();
-  // 各子主题先取一条，再补高分片段，最多六条。
-  for (const list of candidates) {
-    const item = list.find(item => !used.has(item.i));
-    if (item && selected.length < 6) { selected.push(item); used.add(item.i); }
-  }
-  for (const item of candidates.flat().sort((a, b) => b.score - a.score)) {
-    if (selected.length >= 6) break;
-    if (!used.has(item.i)) { selected.push(item); used.add(item.i); }
-  }
-  return { version: index.version + ':retrieval-2', sources: selected.map(({ chunk }, i) => ({
-    id: '资料' + (i + 1), file: chunk.file, page: chunk.page, heading: chunk.heading, text: chunk.text,
-  })) };
+async function fileState(c) {
+    const rows = [];
+    for (const d of c.documents) {
+        const stat = await fs.stat(path.join(BASE, 'materials', c.id, d.file)).catch(e => { if (e.code === 'ENOENT')
+            return null; throw e; });
+        rows.push([d.file, stat?.size || null, stat?.mtimeMs || null]);
+    }
+    return rows;
+}
+async function loadIndex(id) {
+    const c = await catalog(id), file = path.join(BASE, '.rag', id + '.json'), stat = await fs.stat(file).catch(() => { throw new Error('请先运行 npm run rag:index -- ' + id); });
+    const state = hash(await fileState(c));
+    if (cache.get(id)?.mtime === stat.mtimeMs && cache.get(id).catalogHash === hash(c)) {
+        if (state !== hash(cache.get(id).index.fileState))
+            throw new Error('资料文件已变化，请重建索引');
+        return cache.get(id).index;
+    }
+    const ix = JSON.parse(await fs.readFile(file, 'utf8'));
+    if (ix.format !== 2 || ix.revision !== REVISION || ix.catalogHash !== hash(c) || state !== hash(ix.fileState))
+        throw new Error('资料/切分配置已更新，请重建 ' + id + ' 索引');
+    ix.df = new Map();
+    ix.chunks.forEach(c => { c.counts = new Map(); const ts = tokens(c.text + ' ' + c.headingPath.join(' ')); c.length = ts.length; for (const t of ts)
+        c.counts.set(t, (c.counts.get(t) || 0) + 1); for (const t of c.counts.keys())
+        ix.df.set(t, (ix.df.get(t) || 0) + 1); });
+    ix.avg = ix.chunks.reduce((a, c) => a + c.length, 0) / ix.chunks.length;
+    cache.set(id, { mtime: stat.mtimeMs, catalogHash: hash(c), index: ix });
+    return ix;
+}
+function lexicalScore(ix, c, query, aliases = true) {
+    const q = aliases ? expandQuery(query) : query;
+    let score = 0;
+    for (const t of new Set(tokens(q))) {
+        const tf = c.counts.get(t) || 0;
+        if (!tf)
+            continue;
+        const df = ix.df.get(t) || 0;
+        score += Math.log(1 + (ix.chunks.length - df + .5) / (df + .5)) * tf * 2.2 / (tf + 1.2 * (.25 + .75 * c.length / ix.avg));
+    }
+    const phrases = aliases ? [query, ...ALIASES.filter(g => g.some(t => compact(query).includes(compact(t)))).flat()] : [query];
+    if (phrases.some(p => compact(c.heading).includes(compact(p))))
+        score += 12;
+    return score;
+}
+function cosine(a, b) { if (a.length !== b.length)
+    throw new Error('向量维度不匹配'); let dot = 0, aa = 0, bb = 0; for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    aa += a[i] * a[i];
+    bb += b[i] * b[i];
+} return aa && bb ? dot / Math.sqrt(aa * bb) : 0; }
+async function embed(texts) {
+    const base = process.env.RAG_EMBEDDING_BASE_URL || process.env.ZHIPU_BASE_URL, key = process.env.RAG_EMBEDDING_API_KEY || process.env.ZHIPU_API_KEY, model = process.env.RAG_EMBEDDING_MODEL;
+    if (!base || !key || !model)
+        throw new Error('语义检索需要 RAG_EMBEDDING_BASE_URL/API_KEY/MODEL');
+    const response = await require('undici').fetch(base.replace(/\/$/, '') + '/embeddings', { method: 'POST', headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' }, body: JSON.stringify({ model, input: texts, encoding_format: 'float' }), signal: AbortSignal.timeout(60000) });
+    if (!response.ok)
+        throw new Error('Embedding 服务 HTTP ' + response.status);
+    const result = await response.json(), data = result.data?.slice().sort((a, b) => a.index - b.index);
+    if (data?.length !== texts.length || data.some((x, i) => x.index !== i || !Array.isArray(x.embedding) || !x.embedding.length || x.embedding.some(n => !Number.isFinite(n))))
+        throw new Error('Embedding 返回无效向量');
+    return data.map(x => x.embedding);
+}
+function embeddingSignature() { return hash([process.env.RAG_EMBEDDING_BASE_URL || process.env.ZHIPU_BASE_URL, process.env.RAG_EMBEDDING_MODEL]); }
+async function buildEmbeddings(id = DATASET) { const ix = await loadIndex(id), vectors = []; for (let i = 0; i < ix.chunks.length; i += 8) {
+    vectors.push(...await embed(ix.chunks.slice(i, i + 8).map(c => c.headingPath.join(' > ') + '\n' + c.text)));
+    console.log('向量 ' + Math.min(i + 8, ix.chunks.length) + '/' + ix.chunks.length);
+} const dest = path.join(BASE, '.rag', id + '.vectors.json'); await fs.writeFile(dest + '.tmp', JSON.stringify({ indexVersion: ix.version, signature: embeddingSignature(), vectors })); await fs.rename(dest + '.tmp', dest); }
+async function retrieveMaterials({ datasetId = DATASET, nodeLabel = '', ancestors = [], children = [], mode = process.env.RAG_RETRIEVAL_MODE || 'keyword', limit = 6 }) {
+    if (mode === 'none')
+        return { version: REVISION + ':none', sources: [], mode: 'none' };
+    validId(datasetId);
+    if (!['keyword', 'baseline', 'semantic', 'hybrid'].includes(mode))
+        throw new Error('无效检索模式');
+    const documents = (await catalog(datasetId)).documents;
+    const ix = await loadIndex(datasetId), queries = [nodeLabel, ...children.map(c => c.label)].filter(Boolean);
+    let vectors, queryVectors;
+    if (mode === 'semantic' || mode === 'hybrid') {
+        const v = JSON.parse(await fs.readFile(path.join(BASE, '.rag', datasetId + '.vectors.json'), 'utf8').catch(() => { throw new Error('请先运行 npm run rag:embed -- ' + datasetId); }));
+        if (v.indexVersion !== ix.version || v.signature !== embeddingSignature() || v.vectors.length !== ix.chunks.length)
+            throw new Error('向量索引过期或模型已变化，请重建');
+        vectors = v.vectors;
+        queryVectors = await embed(queries);
+    }
+    const lists = queries.map((q, qi) => { const lexical = ix.chunks.map((chunk, i) => ({ chunk, i, score: lexicalScore(ix, chunk, q, mode !== 'baseline') })).filter(x => x.score > 0).sort((a, b) => b.score - a.score); if (!vectors)
+        return lexical; const semantic = ix.chunks.map((chunk, i) => ({ chunk, i, score: cosine(vectors[i], queryVectors[qi]) })).filter(x => x.score >= Number(process.env.RAG_SEMANTIC_MIN_SCORE || .3)).sort((a, b) => b.score - a.score); if (mode === 'semantic')
+        return semantic; const merged = new Map(); for (const list of [lexical.slice(0, 30), semantic.slice(0, 30)])
+        list.forEach((x, r) => { const old = merged.get(x.i); merged.set(x.i, { ...x, score: (old?.score || 0) + 1 / (61 + r) }); }); return [...merged.values()].sort((a, b) => b.score - a.score); });
+    const picked = [], used = new Set();
+    let budget = 0;
+    const take = item => { if (!item || used.has(item.chunk.sectionId) || picked.length >= limit)
+        return; const parent = ix.parents.find(p => p.id === item.chunk.sectionId), from = Math.max(0, item.chunk.startBlock - 1), to = Math.min(parent.blocks.length, item.chunk.endBlock + 2); let text = parent.blocks.slice(from, to).map(b => b.text).join('\n\n'), expanded = true; if (text.length > 4500 || budget + text.length > 14000) {
+        text = item.chunk.text;
+        expanded = false;
+    } if (budget + text.length > 14000)
+        return; const pages = expanded ? parent.blocks.slice(from, to).map(b => b.page).filter(Boolean) : []; const { counts, length, ...chunk } = item.chunk; picked.push({ ...chunk, text, matchedText: chunk.text, page: pages.length ? Math.min(...pages) : chunk.page, pageEnd: pages.length ? Math.max(...pages) : chunk.pageEnd, score: item.score }); used.add(chunk.sectionId); budget += text.length; };
+    for (const list of lists)
+        take(list.find(x => !used.has(x.chunk.sectionId)));
+    for (const item of lists.flat().sort((a, b) => b.score - a.score))
+        take(item);
+    return { version: ix.version + ':' + REVISION + ':' + mode + ':' + (vectors ? embeddingSignature() : ''), mode, sources: picked.map((s, i) => ({ ...s, sourceUrl: documents.find(d => d.id === s.documentId)?.source, id: '资料' + (i + 1) })) };
 }
 function addSourceReferences(content, sources) {
-  const allowed = new Set(sources.map(source => source.id));
-  const cited = [...content.matchAll(/\[资料(\d+)\]/g)].map(match => '资料' + match[1]);
-  if (cited.some(id => !allowed.has(id))) throw new Error('引用了本次未提供的资料编号');
-  if (!cited.length) return sources.length
-    ? content + '\n\n资料说明：本节未标注可核对的课件引用，补充内容需进一步核对。'
-    : content;
-  if (!sources.length) return content;
-  const references = sources.filter(source => cited.includes(source.id));
-  return content + '\n\n---\n\n参考资料（PDF 文件页码）：\n\n' + references.map(source =>
-    '- [' + source.id + '] ' + String.fromCharCode(96) + source.file.replaceAll(String.fromCharCode(96), '') + String.fromCharCode(96) + '，第 ' + source.page + ' 页'
-  ).join('\n');
+    // 参考清单只由元数据生成，模型不得自行编造链接或重复清单。
+    content = content.replace(/\n(?:---\s*\n+)?(?:#{1,6}\s*)?参考资料[：:]?\s*\n[\s\S]*$/, '').trim();
+    const ids = [...content.matchAll(/\[资料(\d+)\]/g)].map(m => '资料' + m[1]);
+    if (ids.some(id => !sources.some(s => s.id === id))) throw new Error('引用了本次未提供的资料编号');
+    if (!ids.length) {
+        if (sources.length && !/资料不足|资料覆盖不足|资料未覆盖|未检索到相关|摘录不足|摘录无法支持/.test(content))
+            throw new Error('已提供参考摘录但正文没有引用；请在直接受支持的论断后标注资料编号，或明确说明资料不足及缺少什么依据，不能牵强引用');
+        return content;
+    }
+    const safe = t => String(t || '').replace(/[\r\n\[\]\x60]/g, ' ').replace(/\$/g, '');
+    const validUrl = value => { try { const u = new URL(value); return /^https?:$/.test(u.protocol) ? u : null; } catch { return null; } };
+    const groups = [], byKey = new Map(), numbers = new Map();
+    for (const id of new Set(ids)) {
+        const source = sources.find(s => s.id === id);
+        const url = validUrl(source.url);
+        const pdf = validUrl(source.sourceUrl);
+        const direct = pdf && /\.pdf$/i.test(pdf.pathname) ? pdf : url;
+        if (direct) direct.hash = '';
+        // 同一网页合并小节；PDF 保留不同页的独立出处。
+        const key = (direct?.href || source.documentId || source.file || source.title || id) + (source.page ? ':' + source.page : '');
+        let group = byKey.get(key);
+        if (!group) { group = { source, headings: [], number: groups.length + 1 }; groups.push(group); byKey.set(key, group); }
+        const heading = safe(source.headingPath?.at(-1) || source.heading);
+        if (heading && !group.headings.includes(heading)) group.headings.push(heading);
+        numbers.set(id, group.number);
+    }
+    const body = content.replace(/\[资料(\d+)\]/g, (_, n) => '[资料' + numbers.get('资料' + n) + ']').replace(/(\[资料\d+\])(?:\1)+/g, '$1');
+    const references = groups.map(({ source, headings, number }) => {
+        const location = source.printedPage ? '，书内第 ' + safe(source.printedPage) + ' 页' : source.page ? '，PDF 第 ' + source.page + (source.pageEnd && source.pageEnd !== source.page ? '–' + source.pageEnd : '') + ' 页' : '';
+        return '- [资料' + number + '] ' + safe(source.title || source.file) + ' · ' + headings.join('、') + location;
+    });
+    return body + '\n\n---\n\n参考资料：\n\n' + references.join('\n');
 }
-module.exports = { buildIndex, retrieveMaterials, addSourceReferences };
+module.exports = { buildIndex, buildEmbeddings, retrieveMaterials, addSourceReferences, expandQuery, markdownSections, chunkSections, cosine, lexicalScore };
 if (require.main === module) {
-  const operation = process.argv[2] === '--query'
-    ? retrieveMaterials({ topic: '自然语言处理', nodeLabel: process.argv.slice(3).join(' ') }).then(result => console.log(JSON.stringify(result, null, 2)))
-    : buildIndex().then(index => console.log('索引完成：' + index.chunks.length + ' 个片段'));
-  operation.catch(error => { console.error(error.message); process.exitCode = 1; });
+    require('dotenv').config({ path: path.join(BASE, '.env.local') });
+    require('dotenv').config({ path: path.join(BASE, '.env') });
+    const a = process.argv.slice(2);
+    let task;
+    if (a[0] === '--query')
+        task = retrieveMaterials({ datasetId: a.length === 2 ? DATASET : a[1], nodeLabel: a.slice(a.length === 2 ? 1 : 2).join(' ') }).then(x => console.log(JSON.stringify(x, null, 2)));
+    else if (a[0] === '--embed')
+        task = buildEmbeddings(a[1]);
+    else
+        task = buildIndex(a[0] || DATASET).then(x => console.log('索引完成：' + x.chunks.length + ' 个片段；缺失可选资料：' + (x.missing || []).join(',')));
+    task.catch(e => { console.error(e.message); process.exitCode = 1; });
 }
