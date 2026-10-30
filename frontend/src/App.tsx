@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useKnowledgeStore } from './stores/useKnowledgeStore';
 import { ThreePanelLayout } from './components/layout/ThreePanelLayout';
 import { BrandGraphIcon } from './components/ui/BrandGraphIcon';
+import { KnowledgeFileActions } from './components/knowledge/KnowledgeFileActions';
 
 function App() {
   const { 
@@ -61,6 +62,9 @@ function App() {
             
             <div className="mt-muted text-xs text-center">
               示例：机器学习、React开发、中国古代史、量子力学...
+            </div>
+            <div className="flex justify-center pt-2">
+              <KnowledgeFileActions nodes={[]} />
             </div>
           </div>
         </div>
@@ -146,6 +150,9 @@ function App() {
                 <span>与AI助手对话深入学习</span>
               </div>
             </div>
+          </div>
+          <div className="mt-6 flex justify-center">
+            <KnowledgeFileActions nodes={[]} />
           </div>
         </div>
       </div>

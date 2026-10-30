@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useKnowledgeStore } from '../../stores/useKnowledgeStore';
 import { TreeNode } from './TreeNode';
 import type { TreeKnowledgeNode } from '../../types';
@@ -20,7 +20,8 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
     expandNode, 
     getCurrentTreeNodes,
     currentTree,
-    toggleNodeExpansion
+    toggleNodeExpansion,
+    markNodeLearned,
   } = useKnowledgeStore();
 
   
@@ -28,6 +29,16 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
   const treeNodes = getCurrentTreeNodes();
   const tree = currentTree();
   const [expansionError, setExpansionError] = useState<string | null>(null);
+  const [learningError, setLearningError] = useState<string | null>(null);
+  const treeScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (currentFocusNodeId === null) return;
+    requestAnimationFrame(() => {
+      treeScrollRef.current?.querySelector(`[data-node-id="${currentFocusNodeId}"]`)
+        ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+  }, [currentFocusNodeId, treeNodes]);
   //没则加载页面
   if (!currentTreeId || !tree) {
     return (
@@ -81,7 +92,8 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
             扩展失败：{expansionError}。请再次点击节点箭头重试。
           </div>
         )}
-        <div className="mt-surface relative max-h-[70vh] overflow-y-auto p-4">
+        {learningError && <div role="alert" className="mb-3 text-sm text-red-700">学习状态保存失败：{learningError}</div>}
+        <div ref={treeScrollRef} className="mt-surface relative max-h-[70vh] overflow-y-auto p-4">
           {structuredNodes.map((rootNode, index) => (
           <TreeNode
             key={rootNode.id}
@@ -93,6 +105,12 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
             onNodeClick={handleNodeClick}
             onEditNode={onEditNode}
             onToggleExpand={handleToggleExpand} // 传入展开/收缩处理函数
+            onToggleLearned={node => {
+              setLearningError(null);
+              void markNodeLearned(node.id, !node.is_learned).catch(error =>
+                setLearningError(error instanceof Error ? error.message : '请重试')
+              );
+            }}
           />
           ))}
         </div>

@@ -14,6 +14,7 @@ interface TreeNodeProps {
   onNodeClick: (node: TreeKnowledgeNode) => void; 
   onEditNode: (nodeId: number) => void;
   onToggleExpand: (node: TreeKnowledgeNode) => void; // 展开/收缩回调
+  onToggleLearned: (node: TreeKnowledgeNode) => void;
 }
 
 export const TreeNode: React.FC<TreeNodeProps> = ({
@@ -23,6 +24,7 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
   onNodeClick, //左键
   onEditNode,
   onToggleExpand, // 接收展开/收缩回调
+  onToggleLearned,
 }) => {
   const isExpanded = node.isExpanded ?? false;
   const isFocused = node.id === currentFocusNodeId;
@@ -82,6 +84,7 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
     <div>
       {/* 视觉统一：节点行共用悬停与选中样式；缩进和标签语义保持不变。 */}
       <div
+        data-node-id={node.id}
         className={`mt-node-row flex items-center gap-2 px-2 py-2 cursor-pointer select-none
           ${isFocused ? 'mt-node-row-active' : ''}`}
         style={{ paddingLeft: indent }}
@@ -138,6 +141,13 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
           )}
         </div>
         {/* 编辑按钮独立于节点选择和展开操作，避免点击时触发笔记生成。 */}
+        <button type="button" title={node.is_learned ? '标记为未学习' : '标记为已学习'}
+          aria-label={node.is_learned ? `标记${node.title}为未学习` : `标记${node.title}为已学习`}
+          aria-pressed={Boolean(node.is_learned)}
+          onClick={event => { event.stopPropagation(); onToggleLearned(node); }}
+          className={`w-7 h-7 flex-shrink-0 rounded-full ${node.is_learned ? 'text-emerald-600' : 'text-slate-400 hover:text-emerald-600'}`}>
+          {node.is_learned ? '✓' : '○'}
+        </button>
         <button type="button" title={`编辑${node.title}`} aria-label={`编辑${node.title}`}
           onClick={event => { event.stopPropagation(); onEditNode(node.id); }}
           className="mt-soft-button w-7 h-7 flex-shrink-0 flex items-center justify-center">
@@ -162,6 +172,7 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
               onNodeClick={onNodeClick}
               onEditNode={onEditNode}
               onToggleExpand={onToggleExpand} // 传递下去
+              onToggleLearned={onToggleLearned}
             />
           ))}
         </div>

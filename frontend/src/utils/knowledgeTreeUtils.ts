@@ -20,6 +20,7 @@ export const buildTreeStructure = (nodes: DbKnowledgeNode[]): TreeKnowledgeNode[
       title: node.label,
       description: node.content ? node.content.substring(0, 100) + '...' : '',
       content: node.content,
+      is_learned: Boolean(node.is_learned),
       relation_type: node.relation_type,        // 新增
       importance: node.importance,              // 新增
       difficulty: node.difficulty,              // 新增

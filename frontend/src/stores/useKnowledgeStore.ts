@@ -7,6 +7,9 @@ interface KnowledgeState extends AppState {
   noteErrors: Record<number, string>;
   generateNote: (nodeId: number, treeId: number) => Promise<void>;
   updateNode: (nodeId: number, treeId: number, changes: { label?: string; content?: string }) => Promise<void>;
+  markNodeLearned: (nodeId: number, isLearned: boolean) => Promise<void>;
+  revealNode: (nodeId: number) => void;
+  revealVersion: number;
   // 计算属性
   currentTree: () => KnowledgeTree | undefined;
   currentFocusNode: () => DbKnowledgeNode | undefined;
@@ -34,6 +37,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   // 初始状态
   noteLoading: {},
   noteErrors: {},
+  revealVersion: 0,
   trees: [],
   currentTreeId: null,
   currentFocusNodeId: null,
@@ -110,6 +114,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
         set(state => ({
           currentTreeNodes: response.nodes.map(node => ({
             ...node,
+            is_learned: Boolean(node.is_learned),
             isExpanded: state.currentTreeNodes.find(previous => previous.id === node.id)?.isExpanded,
           })),
           isLoading: false,
@@ -214,6 +219,39 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     // 手工编辑过的笔记已是最终内容，选中时不再发起自动生成请求。
     const node = get().currentTreeNodes.find(item => item.id === nodeId);
     if (nodeId !== null && treeId !== null && !node?.note_is_manual) void get().generateNote(nodeId, treeId);
+  },
+
+  // 搜索命中后展开从根到目标节点的祖先，并切换焦点。
+  revealNode: (nodeId: number) => {
+    const nodes = get().currentTreeNodes;
+    const target = nodes.find(node => node.id === nodeId);
+    if (!target) return;
+    const ancestors = new Set<number>();
+    let parentId = target.parent_id;
+    while (parentId !== null) {
+      ancestors.add(parentId);
+      parentId = nodes.find(node => node.id === parentId)?.parent_id ?? null;
+    }
+    set(state => ({
+      currentTreeNodes: state.currentTreeNodes.map(node =>
+        ancestors.has(node.id) ? { ...node, isExpanded: true } : node
+      ),
+      revealVersion: state.revealVersion + 1,
+    }));
+    get().setFocusNode(nodeId);
+  },
+
+  // 学习状态由数据库持久化，成功后同步当前树状态。
+  markNodeLearned: async (nodeId: number, isLearned: boolean) => {
+    const treeId = get().currentTreeId;
+    if (treeId === null || !get().currentTreeNodes.some(node => node.id === nodeId)) return;
+    await knowledgeApi.markAsLearned(nodeId, isLearned);
+    if (get().currentTreeId !== treeId) return;
+    set(state => ({
+      currentTreeNodes: state.currentTreeNodes.map(node =>
+        node.id === nodeId ? { ...node, is_learned: isLearned } : node
+      ),
+    }));
   },
 
   // 设置当前知识树

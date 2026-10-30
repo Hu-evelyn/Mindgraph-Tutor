@@ -17,8 +17,24 @@ export const KnowledgeNodeSearch: React.FC<KnowledgeNodeSearchProps> = ({ nodes,
     ? nodes.filter(node =>
         node.label.toLocaleLowerCase().includes(normalizedQuery) ||
         node.content?.toLocaleLowerCase().includes(normalizedQuery)
-      )
+      ).sort((left, right) => {
+        const rank = (node: DbKnowledgeNode) => node.label.toLocaleLowerCase() === normalizedQuery ? 0
+          : node.label.toLocaleLowerCase().startsWith(normalizedQuery) ? 1 : 2;
+        return rank(left) - rank(right);
+      })
     : [];
+
+  const getNodePath = (node: DbKnowledgeNode) => {
+    const path = [node.label];
+    let parentId = node.parent_id;
+    while (parentId !== null) {
+      const parent = nodes.find(item => item.id === parentId);
+      if (!parent) break;
+      path.unshift(parent.label);
+      parentId = parent.parent_id;
+    }
+    return path.join(' › ');
+  };
 
   const selectNode = (nodeId: number) => {
     onSelect(nodeId);
@@ -28,7 +44,7 @@ export const KnowledgeNodeSearch: React.FC<KnowledgeNodeSearchProps> = ({ nodes,
 
   return (
     <div
-      className="mt-node-search relative w-full max-w-md"
+      className="mt-node-search relative w-full min-w-0 max-w-2xl flex-1 basis-80"
       onFocusCapture={() => setIsOpen(true)}
       onBlurCapture={event => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsOpen(false);
@@ -71,6 +87,7 @@ export const KnowledgeNodeSearch: React.FC<KnowledgeNodeSearchProps> = ({ nodes,
                   className="mt-search-result w-full text-left px-3 py-2"
                 >
                   <span className="block text-sm font-medium truncate">{node.label}</span>
+                  <span className="mt-muted block text-[11px] truncate mt-0.5">{getNodePath(node)}</span>
                   {node.content && (
                     <span className="mt-muted block text-xs truncate mt-0.5">
                       {node.content.replace(/\s+/g, ' ').slice(0, 70)}

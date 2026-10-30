@@ -47,6 +47,7 @@ export interface TreeKnowledgeNode {
   title: string;                 // ✅ 必填
   description: string;
   content:string;
+  is_learned: boolean;
   relation_type?: string;        
   importance?: string;          
   difficulty?: string;           
