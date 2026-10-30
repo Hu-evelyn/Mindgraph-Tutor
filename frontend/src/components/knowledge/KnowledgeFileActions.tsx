@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { useKnowledgeStore } from '../../stores/useKnowledgeStore';
 import { knowledgeApi } from '../../services/api';
 import type { DbKnowledgeNode, KnowledgeTree } from '../../types';
-import { buildTreeStructure } from '../../utils/knowledgeTreeUtils';
+import { downloadMindmapSvg, downloadTreePdf } from './knowledgeGraphExport';
 
 interface KnowledgeFileActionsProps {
   tree?: KnowledgeTree;
@@ -36,93 +36,6 @@ function downloadGraph(tree: KnowledgeTree, nodes: DbKnowledgeNode[]) {
   anchor.download = `${tree.root_topic.replace(/[\\/:*?"<>|]/g, '_') || 'knowledge-graph'}.json`;
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
-function openGraphPdf(tree: KnowledgeTree, nodes: DbKnowledgeNode[], mode: 'tree' | 'mindmap') {
-  const roots = buildTreeStructure(nodes);
-  const boxW = 220;
-  const boxH = 64;
-  const gapX = 100;
-  const gapY = 26;
-  const positioned: Array<{ node: (typeof roots)[number]; x: number; y: number; depth: number }> = [];
-  let nextLeafY = 40;
-
-  const place = (node: (typeof roots)[number], depth: number): number => {
-    const children = node.children ?? [];
-    const startY = nextLeafY;
-    if (children.length) {
-      children.forEach(child => place(child, depth + 1));
-      const childPositions = positioned.filter(item => item.depth === depth + 1 && children.some(c => c.id === item.node.id));
-      const first = childPositions[0];
-      const last = childPositions[childPositions.length - 1];
-      const y = first && last ? (first.y + last.y) / 2 : startY;
-      positioned.push({ node, x: 40 + depth * (boxW + gapX), y, depth });
-      return y;
-    }
-    const y = nextLeafY;
-    nextLeafY += boxH + gapY;
-    positioned.push({ node, x: 40 + depth * (boxW + gapX), y, depth });
-    return y;
-  };
-  roots.forEach(root => place(root, 0));
-
-  // Top-down tree uses leaf order for vertical placement; mind map centers the root against its branches.
-  if (mode === 'tree') {
-    const byId = new Map(positioned.map(item => [item.node.id, item]));
-    const leaves = positioned.filter(item => !(item.node.children?.length));
-    const leafX = new Map<number, number>();
-    leaves.forEach((leaf, index) => leafX.set(leaf.node.id, 40 + index * (boxW + gapX)));
-    const updateTopDown = (node: (typeof roots)[number], depth: number): number => {
-      const children = node.children ?? [];
-      const xs = children.map(child => updateTopDown(child, depth + 1));
-      const x = xs.length ? (xs[0] + xs[xs.length - 1]) / 2 : leafX.get(node.id) ?? 40;
-      const item = byId.get(node.id);
-      if (item) { item.x = x; item.y = 40 + depth * (boxH + gapY); }
-      return x;
-    };
-    roots.forEach(root => updateTopDown(root, 0));
-  }
-
-  const maxX = Math.max(1000, ...positioned.map(item => item.x + boxW + 40));
-  const maxY = Math.max(500, ...positioned.map(item => item.y + boxH + 40));
-  const byId = new Map(positioned.map(item => [item.node.id, item]));
-  const esc = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[character]!));
-  const lines = (label: string) => {
-    const chars = Array.from(label);
-    const chunks: string[] = [];
-    while (chars.length) chunks.push(chars.splice(0, 16).join(''));
-    return chunks.slice(0, 3);
-  };
-  const edges = positioned.flatMap(item => (item.node.children ?? []).map(child => {
-    const target = byId.get(child.id);
-    if (!target) return '';
-    if (mode === 'tree') {
-      const x1 = item.x + boxW / 2;
-      const y1 = item.y + boxH;
-      const x2 = target.x + boxW / 2;
-      const y2 = target.y;
-      return `<path d="M ${x1} ${y1} C ${x1} ${y1 + 35}, ${x2} ${y2 - 35}, ${x2} ${y2}" fill="none" stroke="#7895c5" stroke-width="2"/>`;
-    }
-    const x1 = item.x + boxW;
-    const y1 = item.y + boxH / 2;
-    const x2 = target.x;
-    const y2 = target.y + boxH / 2;
-    return `<path d="M ${x1} ${y1} C ${x1 + 35} ${y1}, ${x2 - 35} ${y2}, ${x2} ${y2}" fill="none" stroke="#7895c5" stroke-width="2"/>`;
-  })).join('');
-  const boxes = positioned.map(({ node, x, y }) => {
-    const labelLines = lines(node.title || '未命名节点');
-    const status = node.is_learned ? '已学习' : '未学习';
-    return `<g><rect x="${x}" y="${y}" width="${boxW}" height="${boxH}" rx="12" fill="${node.is_learned ? '#ecfdf5' : '#fff'}" stroke="${node.is_learned ? '#10b981' : '#5578b8'}" stroke-width="2"/><text x="${x + boxW / 2}" y="${y + 25 - (labelLines.length - 1) * 8}" text-anchor="middle" font-size="15" font-weight="600" fill="#20304a">${labelLines.map((line, index) => `<tspan x="${x + boxW / 2}" dy="${index === 0 ? 0 : 18}">${esc(line)}</tspan>`).join('')}</text><text x="${x + boxW / 2}" y="${y + 54}" text-anchor="middle" font-size="11" fill="#718097">${status}</text></g>`;
-  }).join('');
-  const title = esc(tree.root_topic || '知识图谱');
-  const diagram = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${maxX} ${maxY}" role="img"><text x="40" y="28" font-size="22" font-weight="700" fill="#20304a">${title}</text>${edges}${boxes}</svg>`;
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    window.alert('浏览器阻止了新窗口。请允许本站弹出窗口后重试 PDF 导出。');
-    return;
-  }
-  printWindow.document.write(`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>${title} - ${mode === 'tree' ? '树状图' : '思维导图'}</title><style>@page{size:landscape;margin:10mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,"Microsoft YaHei",sans-serif}svg{display:block;width:100%;height:auto;max-height:180mm;page-break-inside:avoid}@media screen{body{padding:24px;background:#f3f6fc}svg{background:white;border:1px solid #dce5f3;box-shadow:0 4px 20px #20304a18}}</style></head><body>${diagram}<script>window.addEventListener('load',()=>setTimeout(()=>window.print(),300))</script></body></html>`);
-  printWindow.document.close();
 }
 
 async function fileToBase64(file: File) {
@@ -184,9 +97,13 @@ export function KnowledgeFileActions({ tree, nodes }: KnowledgeFileActionsProps)
           onClick={() => setExportMenuOpen(open => !open)} disabled={!nodes.length} aria-expanded={exportMenuOpen}>导出图谱 ▾</button>
         {exportMenuOpen && <div className="mt-surface absolute right-0 top-full z-50 mt-2 flex min-w-48 flex-col gap-1 p-2 shadow-xl">
           <button type="button" className="rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50"
-            onClick={() => { setExportMenuOpen(false); openGraphPdf(tree, nodes, 'tree'); }}>导出树状图 PDF</button>
+            onClick={() => { setExportMenuOpen(false); void downloadTreePdf(tree, nodes).catch(error => window.alert(error instanceof Error ? error.message : 'PDF export failed')); }}>导出树状视图 PDF</button>
           <button type="button" className="rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50"
-            onClick={() => { setExportMenuOpen(false); openGraphPdf(tree, nodes, 'mindmap'); }}>导出思维导图 PDF</button>
+            onClick={() => {
+              setExportMenuOpen(false);
+              try { downloadMindmapSvg(tree, nodes); }
+              catch (error) { window.alert(error instanceof Error ? error.message : 'SVG export failed'); }
+            }}>导出思维导图 SVG</button>
           <button type="button" className="rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50"
             onClick={() => { setExportMenuOpen(false); downloadGraph(tree, nodes); }}>导出 JSON 备份</button>
         </div>}
