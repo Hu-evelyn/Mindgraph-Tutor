@@ -4,7 +4,8 @@ const { createHash } = require('node:crypto');
 function sectionsOf(content = '') {
   const result = [];
   let fence = null;
-  for (const line of content.split(/\r?\n/)) {
+  // 导入或手动创建的父节点可能尚无笔记，按空文本处理以便重生成子节点笔记。
+  for (const line of (content || '').split(/\r?\n/)) {
     const marker = line.match(/^\s*(`{3,}|~{3,})/);
     if (marker) {
       if (!fence) fence = marker[1];

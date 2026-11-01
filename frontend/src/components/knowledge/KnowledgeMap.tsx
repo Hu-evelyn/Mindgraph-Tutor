@@ -1,6 +1,5 @@
 //主容器
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useEffect } from 'react';
 import { useKnowledgeStore } from '../../stores/useKnowledgeStore';
 import { KnowledgeTree } from './KnowledgeTree';
 import { MindMapVisualization } from './mind-map/MindMapVisualization';
@@ -9,150 +8,6 @@ import { KnowledgeNodeSearch } from './KnowledgeNodeSearch';
 import { KnowledgeFileActions } from './KnowledgeFileActions';
 import { NodeEditDialog } from './NodeEditDialog';
 import type { TreeKnowledgeNode } from '../../types';
-
-// 帮助信息组件
-const HelpTooltip: React.FC = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [position, setPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-
-  const updatePosition = useCallback(() => {
-    const rect = buttonRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const gap = 12;
-    const edge = 12;
-    const width = Math.min(360, window.innerWidth - edge * 2);
-    const rightLeft = rect.right + gap;
-    const left = rightLeft + width <= window.innerWidth - edge
-      ? rightLeft
-      : Math.max(edge, rect.left - width - gap);
-    const maxHeight = Math.max(180, window.innerHeight - edge * 2);
-    const top = Math.min(Math.max(edge, rect.top), window.innerHeight - maxHeight - edge);
-    setPosition({ top, left, width, maxHeight });
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    updatePosition();
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsOpen(false);
-    };
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
-    window.addEventListener('keydown', closeOnEscape);
-    return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
-      window.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [isOpen, updatePosition]);
-
-  return (
-    <div>
-      {/* 帮助按钮 */}
-      <button
-        ref={buttonRef}
-        onClick={() => setIsOpen(open => !open)}
-        className="mt-soft-button w-8 h-8 flex items-center justify-center rounded-full text-sm"
-        title="查看帮助"
-        aria-label="查看知识图谱帮助"
-        aria-expanded={isOpen}
-      >
-        ?
-      </button>
-
-      {/* 帮助内容 */}
-      {isOpen && position && createPortal(
-        <div
-          role="dialog"
-          aria-label="知识关系说明"
-          className="mt-surface fixed z-[1000] overflow-y-auto p-4 shadow-2xl"
-          style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}
-        >
-          <div className="flex justify-between items-start mb-3">
-            <h3 className="font-semibold text-gray-800">知识关系说明</h3>
-            <button
-              type="button"
-              onClick={() => setIsOpen(false)}
-              className="ml-3 text-gray-400 hover:text-gray-600"
-              aria-label="关闭帮助"
-            >
-              ×
-            </button>
-          </div>
-
-          {/* 关系类型说明 */}
-          <div className="space-y-3">
-            <div>
-              <h4 className="font-medium text-sm text-gray-700 mb-2">关系类型</h4>
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-red-500 rounded"></div>
-                  <span className="font-medium text-red-600">先修关系 (Prerequisite)</span>
-                  <span className="text-gray-600">- 必须掌握的基础知识</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-green-500 rounded"></div>
-                  <span className="font-medium text-green-600">引导至关系 (Leads To)</span>
-                  <span className="text-gray-600">- 推荐学习的延伸知识</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-blue-500 rounded"></div>
-                  <span className="font-medium text-blue-600">属于关系 (Part Of)</span>
-                  <span className="text-gray-600">- 知识体系的组成部分</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-purple-500 rounded border-2 border-dashed border-purple-500"></div>
-                  <span className="font-medium text-purple-600">相关关系 (Related)</span>
-                  <span className="text-gray-600">- 相关的辅助知识</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 节点特性说明 */}
-            <div>
-              <h4 className="font-medium text-sm text-gray-700 mb-2">节点特性</h4>
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-orange-100 border border-orange-300 rounded"></div>
-                  <span className="text-gray-700">核心概念 - 橙色背景</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-blue-100 border border-blue-300 rounded"></div>
-                  <span className="text-gray-700">边界知识点 - 蓝色背景</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-white border-2 border-gray-400 rounded"></div>
-                  <span className="text-gray-700">高重要性 - 粗边框</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-white border border-gray-300 rounded"></div>
-                  <span className="text-gray-700">中重要性 - 中等边框</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-white border border-gray-200 rounded"></div>
-                  <span className="text-gray-700">低重要性 - 细边框</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 操作说明 */}
-            <div>
-              <h4 className="font-medium text-sm text-gray-700 mb-2">操作提示</h4>
-              <ul className="text-xs text-gray-600 space-y-1">
-                <li>• 点击节点查看详细内容</li>
-                <li>• 右键节点可编辑、展开或标记学习状态</li>
-                <li>• 拖动视图可移动思维导图</li>
-                <li>• 使用缩放按钮调整大小</li>
-              </ul>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-    </div>
-  );
-};
 
 export const KnowledgeMap: React.FC = () => {
   const [currentView, setCurrentView] = useState<KnowledgeViewMode>('tree');
@@ -165,6 +20,8 @@ export const KnowledgeMap: React.FC = () => {
     currentTreeId,
     getCurrentTreeNodes,
     updateNode,
+    regenerateChildren,
+    generateNote,
     isLoading
   } = useKnowledgeStore();
   
@@ -215,11 +72,10 @@ export const KnowledgeMap: React.FC = () => {
   }, [treeNodes, currentView]);
 
 
-  // 两种视图共用同一组控件：搜索、帮助、视图切换依次位于导出图谱左侧。
+  // 移除知识关系说明入口；两种视图仍共用搜索、切换和导出控件。
   const viewToolbar = tree ? (
     <div className="flex w-full min-w-0 items-center gap-3">
       <KnowledgeNodeSearch key={tree.id} nodes={treeNodes} onSelect={revealNode} />
-      <HelpTooltip />
       <div className="shrink-0">
         <KnowledgeViewSwitcher currentView={currentView} onViewChange={setCurrentView} />
       </div>
@@ -303,11 +159,19 @@ export const KnowledgeMap: React.FC = () => {
         </div>
       )}
 
-      {/* 树状视图与思维导图共用节点名称编辑框；笔记编辑入口位于右侧详情。 */}
+      {/* 树状视图与思维导图共用两次确认流程；笔记选择“是”后在右侧异步生成。 */}
       {editingNode && currentTreeId !== null && (
         <NodeEditDialog key={editingNode.id} node={editingNode}
           onClose={() => setEditingNodeId(null)}
-          onSave={label => updateNode(editingNode.id, currentTreeId, { label })} />
+          onSave={async (label, options) => {
+            const treeId = currentTreeId;
+            const nodeId = editingNode.id;
+            if (label !== editingNode.label || options.regenerateNote) await updateNode(nodeId, treeId, { label });
+            if (options.regenerateChildren) await regenerateChildren(nodeId, treeId);
+            if (useKnowledgeStore.getState().currentTreeId !== treeId) return;
+            setFocusNode(nodeId);
+            if (options.regenerateNote) void generateNote(nodeId, treeId, true);
+          }} />
       )}
     </div>
   );

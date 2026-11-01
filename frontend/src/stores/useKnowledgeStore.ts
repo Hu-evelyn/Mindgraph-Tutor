@@ -5,8 +5,9 @@ import { knowledgeApi} from '../services/api';
 interface KnowledgeState extends AppState {
   noteLoading: Record<number, boolean>;
   noteErrors: Record<number, string>;
-  generateNote: (nodeId: number, treeId: number) => Promise<void>;
+  generateNote: (nodeId: number, treeId: number, force?: boolean) => Promise<void>;
   updateNode: (nodeId: number, treeId: number, changes: { label?: string; content?: string }) => Promise<void>;
+  regenerateChildren: (nodeId: number, treeId: number) => Promise<void>;
   markNodeLearned: (nodeId: number, isLearned: boolean) => Promise<void>;
   revealNode: (nodeId: number) => void;
   revealVersion: number;
@@ -173,22 +174,27 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   }));
   },
 
-  generateNote: async (nodeId, treeId) => {
-    if (get().currentTreeId !== treeId || get().noteLoading[nodeId]) return;
+  generateNote: async (nodeId, treeId, force = false) => {
+    if (get().currentTreeId !== treeId || (!force && get().noteLoading[nodeId])) return;
     const selectionVersion = treeSelectionVersion;
     const editKey = `${treeId}:${nodeId}`;
+    // 显式重生成优先于仍在进行的自动生成，旧响应不能覆盖此次选择。
+    if (force) noteEditVersions.set(editKey, (noteEditVersions.get(editKey) ?? 0) + 1);
     const editVersion = noteEditVersions.get(editKey) ?? 0;
     set(state => ({ noteLoading: { ...state.noteLoading, [nodeId]: true }, noteErrors: { ...state.noteErrors, [nodeId]: '' } }));
     try {
-      const response = await knowledgeApi.generateNote(nodeId, treeId);
+      const response = await knowledgeApi.generateNote(nodeId, treeId, force);
       if (get().currentTreeId !== treeId || selectionVersion !== treeSelectionVersion ||
           (noteEditVersions.get(editKey) ?? 0) !== editVersion) return;
-      set(state => ({ currentTreeNodes: state.currentTreeNodes.map(node => node.id === nodeId ? { ...node, content: response.content } : node) }));
+      set(state => ({ currentTreeNodes: state.currentTreeNodes.map(node => node.id === nodeId
+        ? { ...node, content: response.content, ...(force && !response.cached ? { note_is_manual: 0, note_generation_paused: 0 } : {}) }
+        : node) }));
     } catch (error) {
       if (get().currentTreeId === treeId && selectionVersion === treeSelectionVersion &&
           (noteEditVersions.get(editKey) ?? 0) === editVersion) set(state => ({ noteErrors: { ...state.noteErrors, [nodeId]: error instanceof Error ? error.message : '笔记生成失败' } }));
     } finally {
-      if (get().currentTreeId === treeId && selectionVersion === treeSelectionVersion) set(state => ({ noteLoading: { ...state.noteLoading, [nodeId]: false } }));
+      if (get().currentTreeId === treeId && selectionVersion === treeSelectionVersion &&
+          (noteEditVersions.get(editKey) ?? 0) === editVersion) set(state => ({ noteLoading: { ...state.noteLoading, [nodeId]: false } }));
     }
   },
 
@@ -213,13 +219,19 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     }
   },
 
+  // 重生成第一层后强制刷新扁平节点列表，两种视图都会同步移除旧子树。
+  regenerateChildren: async (nodeId, treeId) => {
+    await knowledgeApi.regenerateChildren(treeId, nodeId);
+    if (get().currentTreeId === treeId) await get().loadTree(treeId, true);
+  },
+
   // 设置聚焦节点
   setFocusNode: (nodeId: number | null) => {
     set({ currentFocusNodeId: nodeId });
     const treeId = get().currentTreeId;
-    // 手工编辑过的笔记已是最终内容，选中时不再发起自动生成请求。
+    // 手工笔记和明确保留的笔记都不再因重新选中节点而自动生成。
     const node = get().currentTreeNodes.find(item => item.id === nodeId);
-    if (nodeId !== null && treeId !== null && !node?.note_is_manual) void get().generateNote(nodeId, treeId);
+    if (nodeId !== null && treeId !== null && !node?.note_is_manual && !node?.note_generation_paused) void get().generateNote(nodeId, treeId);
   },
 
   // 搜索命中后展开从根到目标节点的祖先，并切换焦点。

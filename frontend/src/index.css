@@ -201,12 +201,13 @@ body {
   background: var(--mt-accent-soft);
 }
 
-.mt-kicker {
-  color: #7190c7;
-  font-size: 11px;
+/* 三面板最上方名称统一改为柔和的灰蓝色。 */
+.mt-panel-title {
+  color: #5f789b;
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  line-height: 1.25;
+  letter-spacing: 0.04em;
 }
 
 .mt-muted {

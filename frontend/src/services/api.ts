@@ -49,10 +49,14 @@ export const knowledgeApi = {
       method: 'POST',
       body: JSON.stringify({ treeId, nodeId, question, history }),
     }),
-  generateNote: (nodeId: number, treeId: number) =>
+  // force 只用于用户明确选择重生成笔记，不会顺带扩展子节点。
+  generateNote: (nodeId: number, treeId: number, force = false) =>
     apiRequest<{ success: boolean; content: string; cached: boolean }>('/generate-note', {
-      method: 'POST', body: JSON.stringify({ nodeId, treeId }),
+      method: 'POST', body: JSON.stringify({ nodeId, treeId, force }),
     }),
+  // 服务端先规划新子节点，再在事务内替换旧子树。
+  regenerateChildren: (treeId: number, nodeId: number) =>
+    apiRequest<{ success: boolean }>(`/tree/${treeId}/node/${nodeId}/regenerate-children`, { method: 'POST' }),
   // 创建新知识树
   createTree: (userPrompt: string, userId: number = 1) =>
     apiRequest<{

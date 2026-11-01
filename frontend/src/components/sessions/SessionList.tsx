@@ -62,7 +62,8 @@ export const SessionList: React.FC<SessionListProps> = ({ onBackToLibrary }) => 
           >
             <ArrowLeftIcon className="w-4 h-4" />
           </button>
-          <h1 className="text-lg font-semibold text-[var(--mt-ink)]">知识树</h1>
+          {/* 左侧顶栏名称改为“目录”，保持与中、右面板统一的灰蓝色样式。 */}
+          <h1 className="mt-panel-title">目录</h1>
         </div>
         <div className="flex-1 px-4 py-3 flex flex-col justify-center">
           {/* 搜索框 */}

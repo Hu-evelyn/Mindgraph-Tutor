@@ -14,6 +14,7 @@ export const KnowledgeViewSwitcher: React.FC<KnowledgeViewSwitcherProps> = ({
 }) => {
   const views = [
     { key: 'tree' as KnowledgeViewMode, label: '树状视图', icon: ChartBarIcon },
+    // 中间顶栏为“知识图谱”，此处保留具体的“思维导图”视图名称。
     { key: 'mindmap' as KnowledgeViewMode, label: '思维导图', icon: MapIcon }
   ];
 
