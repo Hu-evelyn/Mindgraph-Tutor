@@ -32,6 +32,7 @@ let treeSelectionVersion = 0;
 let activeTreeLoad: { treeId: number; version: number; promise: Promise<void> } | null = null;
 // 编辑完成后丢弃较早发起的自动笔记响应，避免覆盖手工内容。
 const noteEditVersions = new Map<string, number>();
+const learningVersions = new Map<string, number>();
 
 export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   // 初始状态
@@ -245,14 +246,54 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   // 学习状态由数据库持久化，成功后同步当前树状态。
   markNodeLearned: async (nodeId: number, isLearned: boolean) => {
     const treeId = get().currentTreeId;
-    if (treeId === null || !get().currentTreeNodes.some(node => node.id === nodeId)) return;
-    await knowledgeApi.markAsLearned(nodeId, isLearned);
-    if (get().currentTreeId !== treeId) return;
+    const nodes = get().currentTreeNodes;
+    if (treeId === null || !nodes.some(node => node.id === nodeId)) return;
+    const affectedIds = new Set<number>([nodeId]);
+    const childrenByParent = new Map<number, number[]>();
+    nodes.forEach(node => {
+      if (node.parent_id === null) return;
+      const siblings = childrenByParent.get(node.parent_id) ?? [];
+      siblings.push(node.id);
+      childrenByParent.set(node.parent_id, siblings);
+    });
+    const pending = [nodeId];
+    while (pending.length) {
+      const parentId = pending.pop()!;
+      for (const childId of childrenByParent.get(parentId) ?? []) {
+        if (affectedIds.has(childId)) continue;
+        affectedIds.add(childId);
+        pending.push(childId);
+      }
+    }
+    const previousLearned = new Map(nodes
+      .filter(node => affectedIds.has(node.id))
+      .map(node => [node.id, Boolean(node.is_learned)]));
+    const requestVersions = new Map<number, number>();
+    affectedIds.forEach(id => {
+      const key = `${treeId}:${id}`;
+      const version = (learningVersions.get(key) ?? 0) + 1;
+      learningVersions.set(key, version);
+      requestVersions.set(id, version);
+    });
     set(state => ({
       currentTreeNodes: state.currentTreeNodes.map(node =>
-        node.id === nodeId ? { ...node, is_learned: isLearned } : node
+        affectedIds.has(node.id) ? { ...node, is_learned: isLearned } : node
       ),
     }));
+    try {
+      await knowledgeApi.markAsLearned(nodeId, isLearned);
+    } catch (error) {
+      if (get().currentTreeId === treeId) {
+        set(state => ({
+          currentTreeNodes: state.currentTreeNodes.map(node =>
+            affectedIds.has(node.id) && learningVersions.get(`${treeId}:${node.id}`) === requestVersions.get(node.id)
+              ? { ...node, is_learned: previousLearned.get(node.id) ?? false }
+              : node
+          ),
+        }));
+      }
+      throw error;
+    }
   },
 
   // 设置当前知识树

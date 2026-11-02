@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useKnowledgeStore } from '../../../stores/useKnowledgeStore';
 import type { TreeKnowledgeNode } from '../../../types';
 import { buildTreeStructure } from '../../../utils/knowledgeTreeUtils';
@@ -27,15 +27,89 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [viewportSize, setViewportSize] = useState({ width: 800, height: 600 });
+  const pendingZoomScroll = useRef<{ left: number; top: number } | null>(null);
+  const wheelZoomFrame = useRef<number | null>(null);
+  const pendingWheelZoom = useRef<{ deltaY: number; clientX: number; clientY: number } | null>(null);
   const [contextMenu, setContextMenu] = useState<{x: number; y: number; node: TreeKnowledgeNode} | null>(null);
   const [expansionError, setExpansionError] = useState<{nodeId: number; treeId: number; message: string} | null>(null);
   const [learningError, setLearningError] = useState('');
+  const [celebratingNodeId, setCelebratingNodeId] = useState<number | null>(null);
+  const celebrationTimer = useRef<number | null>(null);
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 1000, height: 600 });
   const [isDragging, setIsDragging] = useState(false);
   const panPoint = useRef<{ x: number; y: number } | null>(null);
   const lastCenteredNodeId = useRef<number | null>(null);
   const lastRevealVersion = useRef(0);
   const [zoom, setZoom] = useState(1);
+  const zoomRef = useRef(1);
+  const zoomChangeRef = useRef<(newZoom: number, clientX?: number, clientY?: number) => void>(() => {});
+  zoomRef.current = zoom;
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const measure = () => {
+      const nextSize = {
+        width: Math.max(1, viewport.clientWidth),
+        height: Math.max(1, viewport.clientHeight),
+      };
+      setViewportSize(previous => previous.width === nextSize.width && previous.height === nextSize.height
+        ? previous
+        : nextSize);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
+
+  // Apply the anchor correction after React updates the canvas size but before the browser paints.
+  // Deferring this to a second animation frame made the diagram visibly jump between frames.
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    const pending = pendingZoomScroll.current;
+    pendingZoomScroll.current = null;
+    if (!viewport || !pending) return;
+    viewport.scrollLeft = Math.max(0, Math.min(viewport.scrollWidth - viewport.clientWidth, pending.left));
+    viewport.scrollTop = Math.max(0, Math.min(viewport.scrollHeight - viewport.clientHeight, pending.top));
+  }, [zoom, viewportSize]);
+
+  // Native non-passive listener is required so Ctrl+wheel can cancel browser page zoom.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const handleNativeWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const pending = pendingWheelZoom.current;
+      pendingWheelZoom.current = {
+        deltaY: (pending?.deltaY ?? 0) + event.deltaY,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      };
+      // Trackpads can emit many wheel events per frame. Apply one zoom update per paint
+      // and use the latest pointer location as the anchor for that batch.
+      if (wheelZoomFrame.current === null) {
+        wheelZoomFrame.current = requestAnimationFrame(() => {
+          wheelZoomFrame.current = null;
+          const wheel = pendingWheelZoom.current;
+          pendingWheelZoom.current = null;
+          if (!wheel) return;
+          zoomChangeRef.current(
+            zoomRef.current * Math.exp(-wheel.deltaY * 0.002),
+            wheel.clientX,
+            wheel.clientY,
+          );
+        });
+      }
+    };
+    viewport.addEventListener('wheel', handleNativeWheel, { passive: false });
+    return () => viewport.removeEventListener('wheel', handleNativeWheel);
+  }, []);
   
   const {
     currentTreeId,
@@ -54,9 +128,23 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
 
   useEffect(() => {
     setViewBox({ x: 0, y: 0, width: 1000, height: 600 });
+    zoomRef.current = 1;
     setZoom(1);
+    if (wheelZoomFrame.current !== null) window.cancelAnimationFrame(wheelZoomFrame.current);
+    pendingZoomScroll.current = null;
+    wheelZoomFrame.current = null;
+    pendingWheelZoom.current = null;
+    if (viewportRef.current) {
+      viewportRef.current.scrollLeft = 0;
+      viewportRef.current.scrollTop = 0;
+    }
     lastCenteredNodeId.current = null;
   }, [currentTreeId]);
+
+  useEffect(() => () => {
+    if (celebrationTimer.current !== null) window.clearTimeout(celebrationTimer.current);
+    if (wheelZoomFrame.current !== null) window.cancelAnimationFrame(wheelZoomFrame.current);
+  }, []);
 
   // 自动调整思维导图大小以适应内容
   const calculateOptimalViewBox = (layout: NodeLayout[]) => {
@@ -92,12 +180,10 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   };
 
   const handlePointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (!panPoint.current || !svgRef.current) return;
-    const bounds = svgRef.current.getBoundingClientRect();
+    if (!panPoint.current || !viewportRef.current) return;
     const point = panPoint.current;
-    const dx = (event.clientX - point.x) * viewBox.width / Math.max(bounds.width, 1);
-    const dy = (event.clientY - point.y) * viewBox.height / Math.max(bounds.height, 1);
-    setViewBox(previous => ({ ...previous, x: previous.x - dx, y: previous.y - dy }));
+    viewportRef.current.scrollLeft -= event.clientX - point.x;
+    viewportRef.current.scrollTop -= event.clientY - point.y;
     panPoint.current = { x: event.clientX, y: event.clientY };
   };
 
@@ -109,10 +195,33 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     setIsDragging(false);
   };
 
-  // 滑块与加减按钮共用 30%–500% 的缩放范围。
-  const handleZoomChange = (newZoom: number) => {
-    const clampedZoom = Math.max(0.3, Math.min(5, newZoom));
+  // 放大时扩展实际 SVG 画布尺寸，从而让视口出现可拖动的上下/左右滚动条。
+  // 计算缩放前鼠标所在的画布比例，缩放后调整 scrollLeft/Top，保持该位置锚定在鼠标下。
+  const handleZoomChange = (newZoom: number, clientX?: number, clientY?: number) => {
+    const clampedZoom = Math.max(0.3, Math.min(10, newZoom));
+    if (clampedZoom === zoomRef.current) return;
+    const viewport = viewportRef.current;
+    const svg = svgRef.current;
+    const viewportBounds = viewport?.getBoundingClientRect();
+    const svgBounds = svg?.getBoundingClientRect();
+    const localX = viewportBounds ? (clientX ?? viewportBounds.left + viewportBounds.width / 2) - viewportBounds.left : 0;
+    const localY = viewportBounds ? (clientY ?? viewportBounds.top + viewportBounds.height / 2) - viewportBounds.top : 0;
+    const ratioX = viewport && svgBounds
+      ? Math.max(0, Math.min(1, (localX - svgBounds.left + (viewportBounds?.left ?? 0)) / Math.max(svgBounds.width, 1)))
+      : 0.5;
+    const ratioY = viewport && svgBounds
+      ? Math.max(0, Math.min(1, (localY - svgBounds.top + (viewportBounds?.top ?? 0)) / Math.max(svgBounds.height, 1)))
+      : 0.5;
+    const nextWidth = viewportSize.width * clampedZoom;
+    const nextHeight = viewportSize.height * clampedZoom;
+    const nextLeft = Math.max(0, (viewportSize.width - nextWidth) / 2);
+    const nextTop = Math.max(0, (viewportSize.height - nextHeight) / 2);
+    zoomRef.current = clampedZoom;
     setZoom(clampedZoom);
+    pendingZoomScroll.current = {
+      left: ratioX * nextWidth + nextLeft - localX,
+      top: ratioY * nextHeight + nextTop - localY,
+    };
   };
 
   // 缩放按钮处理
@@ -123,6 +232,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   const handleZoomOut = () => {
     handleZoomChange(zoom - 0.1);
   };
+  zoomChangeRef.current = handleZoomChange;
 
   useEffect(() => {
     if (lastRevealVersion.current !== revealVersion) {
@@ -130,7 +240,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       lastRevealVersion.current = revealVersion;
     }
     if (svgRef.current) renderMindMap();
-  }, [treeNodes, currentFocusNodeId, zoom, revealVersion]);
+  }, [treeNodes, currentFocusNodeId, revealVersion, celebratingNodeId]);
 
   const calculateLayout = (rootNodes: TreeKnowledgeNode[]): NodeLayout[] => {
     const layout: NodeLayout[] = [];
@@ -292,6 +402,11 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
         group.classList.add('boundary-concept');
       }
       group.classList.add(`importance-${importance}`);
+      group.classList.add(node.is_learned ? 'node-learned' : 'node-unlearned');
+      const hasStarTag = Boolean(isCore || isBoundary || importance === 'high' || relationType !== 'PART_OF');
+      const nodeTitle = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+      nodeTitle.textContent = `${node.title} · ${node.is_learned ? '已学习' : '未学习'}`;
+      group.appendChild(nodeTitle);
 
       {
         const learnedBadge = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -299,18 +414,18 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
         badge.setAttribute('cx', (node.width - 15).toString());
         badge.setAttribute('cy', '15');
         badge.setAttribute('r', '8');
-        badge.setAttribute('fill', node.is_learned ? '#059669' : 'white');
-        badge.setAttribute('stroke', node.is_learned ? '#059669' : '#94a3b8');
+        badge.setAttribute('fill', node.is_learned ? '#059669' : '#fff7ed');
+        badge.setAttribute('stroke', node.is_learned ? '#059669' : '#f59e0b');
         badge.setAttribute('stroke-width', '1.5');
         const check = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         check.setAttribute('x', (node.width - 15).toString());
         check.setAttribute('y', '19');
         check.setAttribute('text-anchor', 'middle');
-        check.setAttribute('fill', 'white');
+        check.setAttribute('fill', node.is_learned ? 'white' : '#b45309');
         check.setAttribute('font-size', '12');
-        if (node.is_learned) check.textContent = '✓';
+        check.textContent = node.is_learned ? '✓' : '○';
         learnedBadge.append(badge);
-        if (node.is_learned) learnedBadge.appendChild(check);
+        learnedBadge.appendChild(check);
         group.appendChild(learnedBadge);
       }
 
@@ -318,12 +433,18 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       let nodeColor = 'white';
       let borderColor = '#cbd5e1';
       
-      if (isCore) {
+      if (node.is_learned) {
+        nodeColor = '#ecfdf5';
+        borderColor = '#10b981';
+      } else if (isCore) {
         nodeColor = '#fff7ed'; // 核心概念橙色系
         borderColor = '#ea580c';
       } else if (isBoundary) {
         nodeColor = '#f0f9ff'; // 边界知识点蓝色系
         borderColor = '#0ea5e9';
+      } else {
+        nodeColor = '#f8fafc';
+        borderColor = '#94a3b8';
       }
       
       // 根据重要性设置边框粗细
@@ -334,10 +455,12 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       rect.setAttribute('width', node.width.toString());
       rect.setAttribute('height', node.height.toString());
       rect.setAttribute('rx', '8');
-      rect.setAttribute('fill', isFocused ? '#3b82f6' : nodeColor);
+      rect.setAttribute('fill', isFocused && !node.is_learned ? '#3b82f6' : nodeColor);
       rect.setAttribute('stroke', isFocused ? '#1d4ed8' : borderColor);
       rect.setAttribute('stroke-width', isFocused ? '3' : borderWidth);
-      rect.setAttribute('class', 'mind-map-node');
+      rect.setAttribute('class', node.is_learned && celebratingNodeId === node.id
+        ? 'mind-map-node mind-map-node-learning-complete'
+        : 'mind-map-node');
 
       // 添加关系类型标识
       if (relationType !== 'PART_OF') {
@@ -380,7 +503,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       metaText.setAttribute('text-anchor', 'middle');
       metaText.setAttribute('fill', isFocused ? 'white' : '#6b7280');
       metaText.setAttribute('font-size', '10');
-      metaText.textContent = `难度：${node.difficulty || '未设置'}`;
+      metaText.textContent = `难度：${node.difficulty || '未设置'} · ${node.is_learned ? '已学习' : '未学习'}${hasStarTag ? ' · ⭐' : ''}`;
       
       group.appendChild(rect);
       group.appendChild(titleText);
@@ -484,6 +607,11 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     const { id, is_learned } = contextMenu.node;
     setContextMenu(null);
     setLearningError('');
+    if (!is_learned) {
+      setCelebratingNodeId(id);
+      if (celebrationTimer.current !== null) window.clearTimeout(celebrationTimer.current);
+      celebrationTimer.current = window.setTimeout(() => setCelebratingNodeId(null), 850);
+    }
     void markNodeLearned(id, !is_learned)
       .catch(error => setLearningError(error instanceof Error ? error.message : '请重试'));
   };
@@ -506,8 +634,24 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     const layout = calculateLayout(rootNodes);
     const optimalViewBox = calculateOptimalViewBox(layout);
     setViewBox(optimalViewBox);
+    zoomRef.current = 1;
     setZoom(1);
+    pendingZoomScroll.current = null;
+    if (wheelZoomFrame.current !== null) window.cancelAnimationFrame(wheelZoomFrame.current);
+    wheelZoomFrame.current = null;
+    pendingWheelZoom.current = null;
+    if (viewportRef.current) {
+      viewportRef.current.scrollLeft = 0;
+      viewportRef.current.scrollTop = 0;
+    }
   };
+
+  const svgWidth = Math.max(1, viewportSize.width * zoom);
+  const svgHeight = Math.max(1, viewportSize.height * zoom);
+  const surfaceWidth = Math.max(viewportSize.width, svgWidth);
+  const surfaceHeight = Math.max(viewportSize.height, svgHeight);
+  const svgLeft = Math.max(0, (surfaceWidth - svgWidth) / 2);
+  const svgTop = Math.max(0, (surfaceHeight - svgHeight) / 2);
 
   if (!tree) {
     return (
@@ -562,7 +706,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
               <input
                 type="range"
                 min="30"
-                max="500"
+                max="1000"
                 value={zoom * 100}
                 onChange={(e) => handleZoomChange(parseInt(e.target.value) / 100)}
                 className="w-24 accent-[var(--mt-accent)]"
@@ -589,15 +733,8 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
 
     
     {/* 思维导图内容区域 */}
-    <div className="mind-map-content">
-      <div 
-        style={{
-          transform: `scale(${zoom})`,
-          transformOrigin: '0 0',
-          width: '100%',
-          height: '100%'
-        }}
-      >
+    <div ref={viewportRef} className="mind-map-content">
+      <div className="mind-map-scroll-surface" style={{ width: surfaceWidth, height: surfaceHeight }}>
         <svg
           ref={svgRef}
           className="mind-map-svg"
@@ -607,14 +744,21 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+          style={{
+            position: 'absolute',
+            left: svgLeft,
+            top: svgTop,
+            width: svgWidth,
+            height: svgHeight,
+            cursor: isDragging ? 'grabbing' : 'grab',
+          }}
         />
       </div>
     </div>
 
     {/* 操作提示 */}
     <div className="p-2 text-xs text-gray-500 text-center">
-      提示: 拖动可移动视图 • 使用缩放按钮调整大小
+      提示: 拖动可移动视图 • 按住 Ctrl 并滚动可缩放，也可使用缩放按钮
     </div>
 
     {/* 右键菜单 */}

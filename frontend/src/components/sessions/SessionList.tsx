@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useKnowledgeStore } from '../../stores/useKnowledgeStore';
 import { ArrowLeftIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { NewKnowledgeTreeButton } from '../knowledge/NewKnowledgeTreeButton';
 
 interface SessionListProps {
   onBackToLibrary: () => void;
 }
 
 export const SessionList: React.FC<SessionListProps> = ({ onBackToLibrary }) => {
-  const { trees, currentTreeId, setCurrentTree, createNewTree, isLoading, deleteTree } = useKnowledgeStore();
+  const { trees, currentTreeId, setCurrentTree, deleteTree } = useKnowledgeStore();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [treeToDelete, setTreeToDelete] = useState<number | null>(null);
@@ -15,13 +16,6 @@ export const SessionList: React.FC<SessionListProps> = ({ onBackToLibrary }) => 
   const filteredTrees = trees.filter(tree =>
     tree.root_topic.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  const handleNewTree = async () => {
-    const topic = window.prompt('请输入学习主题，例如：机器学习、数据库、操作系统');
-    if (!topic?.trim()) return;
-    try { await createNewTree(topic.trim()); }
-    catch (error) { alert(error instanceof Error ? error.message : '创建知识树失败'); }
-  };
 
   const handleDeleteClick = (treeId: number, e: React.MouseEvent) => {
     e.stopPropagation(); // 阻止事件冒泡，避免触发知识树选择
@@ -77,20 +71,7 @@ export const SessionList: React.FC<SessionListProps> = ({ onBackToLibrary }) => 
           </div>
 
           {/* 新建按钮 */}
-          <button
-            onClick={handleNewTree}
-            disabled={isLoading}
-            className="mt-primary-button w-full py-2 px-4 flex items-center justify-center gap-2"
-          >
-            {isLoading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                创建中...
-              </>
-            ) : (
-              '新建知识树'
-            )}
-          </button>
+          <NewKnowledgeTreeButton className="mt-primary-button w-full py-2 px-4 flex items-center justify-center gap-2" />
         </div>
       </div>
 

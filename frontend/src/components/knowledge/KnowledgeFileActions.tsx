@@ -92,9 +92,9 @@ export function KnowledgeFileActions({ tree, nodes, mode = 'both' }: KnowledgeFi
       {mode !== 'export' && <>
         <input ref={inputRef} type="file" accept=".json,.pdf,.txt,.md" className="sr-only"
           aria-label="选择要导入的文件" onChange={event => void handleImport(event.target.files?.[0])} />
-        <button type="button" className={`mt-soft-button px-3 text-sm whitespace-nowrap ${mode === 'import' ? 'h-[42px]' : 'h-10'}`}
+        <button type="button" className={`mt-soft-button px-3 text-sm whitespace-nowrap ${mode === 'import' ? 'h-[42px] w-full' : 'h-10'}`}
           disabled={isImporting} onClick={() => inputRef.current?.click()}>
-          {isImporting ? '导入中…' : '导入文件'}
+          {isImporting ? '导入中…' : '导入文件生成知识树'}
         </button>
       </>}
       {mode !== 'import' && tree && <div className="relative">

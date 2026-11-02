@@ -83,7 +83,7 @@ export async function downloadTreePdf(tree: KnowledgeTree, nodes: DbKnowledgeNod
       else line += char;
     });
     if (line) lines.push(line);
-    const metadata = [node.is_core ? '核心' : '', node.importance === 'high' ? '重要' : '', `难度：${node.difficulty || '未设置'}`, node.is_learned ? '已学习' : '未学习'].filter(Boolean).join('  ·  ');
+    const metadata = [node.is_core ? '核心' : '', node.importance === 'high' ? '重要 *' : '', `难度：${node.difficulty || '未设置'}`, node.is_learned ? '已学习' : '未学习'].filter(Boolean).join('  ·  ');
     return { node, indent, lines, metadata, height: Math.max(38, lines.length * 18 + 18) };
   });
   const pageRows: typeof rows[] = [];
@@ -199,7 +199,7 @@ export function downloadMindmapSvg(tree: KnowledgeTree, nodes: DbKnowledgeNode[]
     const node = item.node;
     const titleY = item.y + 30 - (item.lines.length - 1) * 9;
     const title = item.lines.map((line, index) => `<tspan x="${item.x + nodeWidth / 2}" dy="${index ? 22 : 0}">${escapeXml(line)}</tspan>`).join('');
-    const metadata = [node.is_core ? '核心' : '', node.importance === 'high' ? '重要' : '', `难度：${node.difficulty || '未设置'}`, node.is_learned ? '已学习' : '未学习'].filter(Boolean).join(' · ');
+    const metadata = [node.is_core ? '核心' : '', node.importance === 'high' ? '重要 *' : '', `难度：${node.difficulty || '未设置'}`, node.is_learned ? '已学习' : '未学习'].filter(Boolean).join(' · ');
     return `<g><rect x="${item.x}" y="${item.y}" width="${nodeWidth}" height="${item.height}" rx="14" fill="${node.is_learned ? '#ecfdf5' : '#fff'}" stroke="${node.is_learned ? '#10b981' : node.is_core ? '#ea580c' : '#7895c5'}" stroke-width="3"/><text x="${item.x + nodeWidth / 2}" y="${titleY}" text-anchor="middle" font-family="Microsoft YaHei, SimSun, sans-serif" font-size="18" font-weight="600" fill="#20304a">${title}</text><text x="${item.x + nodeWidth / 2}" y="${item.y + item.height - 16}" text-anchor="middle" font-family="Microsoft YaHei, SimSun, sans-serif" font-size="12" fill="#718097">${escapeXml(metadata)}</text></g>`;
   }).join('');
   const title = escapeXml(tree.root_topic || '知识图谱');

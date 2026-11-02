@@ -133,6 +133,11 @@ const HelpTooltip: React.FC = () => {
                   <div className="w-4 h-4 bg-white border border-gray-200 rounded"></div>
                   <span className="text-gray-700">低重要性 - 细边框</span>
                 </div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700">已学习</span>
+                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">未学习</span>
+                </div>
+                <p className="text-xs text-gray-500">重要 * 为重要知识点标记；后续可扩展学习引导和自主注释。</p>
               </div>
             </div>
 
@@ -143,7 +148,8 @@ const HelpTooltip: React.FC = () => {
                 <li>• 点击节点查看详细内容</li>
                 <li>• 右键节点可编辑、展开或标记学习状态</li>
                 <li>• 拖动视图可移动思维导图</li>
-                <li>• 使用缩放按钮调整大小</li>
+                <li>• 按住 Ctrl 并滚动鼠标滚轮可缩放思维导图</li>
+                <li>• 也可使用缩放按钮或滑块调整大小</li>
               </ul>
             </div>
           </div>
