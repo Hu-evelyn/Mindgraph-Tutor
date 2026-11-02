@@ -1,5 +1,5 @@
 import React from 'react';
-import { AcademicCapIcon, DocumentTextIcon, ChevronDownIcon, ChevronRightIcon, PlusIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
+import { AcademicCapIcon, DocumentTextIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import type { TreeKnowledgeNode } from '../../types';
 
 
@@ -12,7 +12,7 @@ interface TreeNodeProps {
   totalSiblings: number;
   currentFocusNodeId: number | null;
   onNodeClick: (node: TreeKnowledgeNode) => void; 
-  onEditNode: (nodeId: number) => void;
+  onOpenContextMenu: (node: TreeKnowledgeNode, x: number, y: number) => void;
   onToggleExpand: (node: TreeKnowledgeNode) => void; // 展开/收缩回调
   onToggleLearned: (node: TreeKnowledgeNode) => void;
 }
@@ -22,7 +22,7 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
   depth,
   currentFocusNodeId,
   onNodeClick, //左键
-  onEditNode,
+  onOpenContextMenu,
   onToggleExpand, // 接收展开/收缩回调
   onToggleLearned,
 }) => {
@@ -83,12 +83,17 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
   return (
     <div>
       {/* 视觉统一：节点行共用悬停与选中样式；缩进和标签语义保持不变。 */}
+      {/* 树状视图右键节点打开与思维导图相同的操作菜单，不改变当前笔记焦点。 */}
       <div
         data-node-id={node.id}
         className={`mt-node-row flex items-center gap-2 px-2 py-2 cursor-pointer select-none
           ${isFocused ? 'mt-node-row-active' : ''}`}
         style={{ paddingLeft: indent }}
         onClick={handleNodeClick}
+        onContextMenu={event => {
+          event.preventDefault(); event.stopPropagation();
+          onOpenContextMenu(node, event.clientX, event.clientY);
+        }}
       >
         {/* 展开 / 收起图标 */}
         {hasChildren && (
@@ -102,19 +107,8 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
             {isExpanded ? <ChevronDownIcon className="w-4 h-4" /> : <ChevronRightIcon className="w-4 h-4" />}
           </button>
         )}
-        {/* 对于没有子节点但可以展开的节点 */}
-        {!hasChildren && !node.childrenGenerated && (
-          <button
-            type="button"
-            title="生成子节点"
-            aria-label="生成子节点"
-            onClick={handleToggle}
-            className="w-6 h-6 flex items-center justify-center text-gray-400 hover:bg-gray-200 rounded"
-          >
-            <PlusIcon className="w-4 h-4" />
-          </button>
-        )}
-        {!hasChildren && node.childrenGenerated && <span aria-hidden="true" className="w-6 h-6" />}
+        {/* 新子节点只从右键菜单生成；无子节点时仍占位以保持层级对齐。 */}
+        {!hasChildren && <span aria-hidden="true" className="w-6 h-6" />}
 
         {/* 节点图标 */}
         {getNodeIcon()}
@@ -140,18 +134,13 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
             </div>
           )}
         </div>
-        {/* 编辑按钮独立于节点选择和展开操作，避免点击时触发笔记生成。 */}
+        {/* 学习状态仍可直接标记；节点编辑已移至右键菜单。 */}
         <button type="button" title={node.is_learned ? '标记为未学习' : '标记为已学习'}
           aria-label={node.is_learned ? `标记${node.title}为未学习` : `标记${node.title}为已学习`}
           aria-pressed={Boolean(node.is_learned)}
           onClick={event => { event.stopPropagation(); onToggleLearned(node); }}
           className={`w-7 h-7 flex-shrink-0 rounded-full ${node.is_learned ? 'text-emerald-600' : 'text-slate-400 hover:text-emerald-600'}`}>
           {node.is_learned ? '✓' : '○'}
-        </button>
-        <button type="button" title={`编辑${node.title}`} aria-label={`编辑${node.title}`}
-          onClick={event => { event.stopPropagation(); onEditNode(node.id); }}
-          className="mt-soft-button w-7 h-7 flex-shrink-0 flex items-center justify-center">
-          <PencilSquareIcon className="w-4 h-4" />
         </button>
       </div>
 
@@ -170,7 +159,7 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
               totalSiblings={node.children!.length}
               currentFocusNodeId={currentFocusNodeId}
               onNodeClick={onNodeClick}
-              onEditNode={onEditNode}
+              onOpenContextMenu={onOpenContextMenu}
               onToggleExpand={onToggleExpand} // 传递下去
               onToggleLearned={onToggleLearned}
             />

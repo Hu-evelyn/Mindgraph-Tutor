@@ -8,6 +8,7 @@ interface KnowledgeState extends AppState {
   generateNote: (nodeId: number, treeId: number, force?: boolean) => Promise<void>;
   updateNode: (nodeId: number, treeId: number, changes: { label?: string; content?: string }) => Promise<void>;
   regenerateChildren: (nodeId: number, treeId: number) => Promise<void>;
+  deleteNodeSubtree: (nodeId: number, treeId: number) => Promise<void>;
   markNodeLearned: (nodeId: number, isLearned: boolean) => Promise<void>;
   revealNode: (nodeId: number) => void;
   revealVersion: number;
@@ -223,6 +224,43 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   regenerateChildren: async (nodeId, treeId) => {
     await knowledgeApi.regenerateChildren(treeId, nodeId);
     if (get().currentTreeId === treeId) await get().loadTree(treeId, true);
+  },
+
+  // 删除响应携带整棵子树的 ID；先同步移除节点和笔记焦点，再刷新数据库中的父节点状态。
+  deleteNodeSubtree: async (nodeId, treeId) => {
+    const response = await knowledgeApi.deleteNodeSubtree(treeId, nodeId);
+    const deletedIds = new Set(response.deletedNodeIds);
+    for (const id of deletedIds) {
+      const key = `${treeId}:${id}`;
+      noteEditVersions.set(key, (noteEditVersions.get(key) ?? 0) + 1);
+    }
+    set(state => {
+      const parentId = state.currentTreeId === treeId
+        ? state.currentTreeNodes.find(node => node.id === nodeId)?.parent_id : null;
+      const remaining = state.currentTreeId === treeId
+        ? state.currentTreeNodes.filter(node => !deletedIds.has(node.id)) : state.currentTreeNodes;
+      const noteLoading = { ...state.noteLoading };
+      const noteErrors = { ...state.noteErrors };
+      for (const id of deletedIds) { delete noteLoading[id]; delete noteErrors[id]; }
+      return {
+        trees: response.deletedTree
+          ? state.trees.filter(tree => tree.id !== treeId)
+          : state.trees.map(tree => tree.id === treeId
+            ? { ...tree, node_count: Math.max(0, (tree.node_count ?? state.currentTreeNodes.length) - response.deletedNodes) }
+            : tree),
+        ...(state.currentTreeId === treeId ? {
+          currentTreeNodes: remaining.map(node => node.id === parentId && !remaining.some(child => child.parent_id === parentId)
+            ? { ...node, children_generated: 0, note_generation_paused: 1 } : node),
+          currentFocusNodeId: state.currentFocusNodeId !== null && deletedIds.has(state.currentFocusNodeId)
+            ? null : state.currentFocusNodeId,
+          noteLoading,
+          noteErrors,
+        } : {}),
+      };
+    });
+    if (get().currentTreeId !== treeId) return;
+    if (response.deletedTree) get().setCurrentTree(get().trees[0]?.id ?? null);
+    else void get().loadTree(treeId, true).catch(error => console.error('删除后刷新知识树失败:', error));
   },
 
   // 设置聚焦节点

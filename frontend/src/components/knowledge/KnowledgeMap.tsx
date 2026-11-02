@@ -7,11 +7,13 @@ import { KnowledgeViewSwitcher, type KnowledgeViewMode } from './KnowledgeViewSw
 import { KnowledgeNodeSearch } from './KnowledgeNodeSearch';
 import { KnowledgeFileActions } from './KnowledgeFileActions';
 import { NodeEditDialog } from './NodeEditDialog';
+import { NodeDeleteDialog } from './NodeDeleteDialog';
 import type { TreeKnowledgeNode } from '../../types';
 
 export const KnowledgeMap: React.FC = () => {
   const [currentView, setCurrentView] = useState<KnowledgeViewMode>('tree');
   const [editingNodeId, setEditingNodeId] = useState<number | null>(null);
+  const [deletingNodeId, setDeletingNodeId] = useState<number | null>(null);
   
   const { 
     currentTree, 
@@ -22,6 +24,7 @@ export const KnowledgeMap: React.FC = () => {
     updateNode,
     regenerateChildren,
     generateNote,
+    deleteNodeSubtree,
     isLoading
   } = useKnowledgeStore();
   
@@ -32,7 +35,7 @@ export const KnowledgeMap: React.FC = () => {
   const progress = treeNodes.length ? Math.round(learnedCount / treeNodes.length * 100) : 0;
 
   // 切换知识树时关闭旧节点的编辑框，避免误把内容保存到新的学习主题。
-  useEffect(() => setEditingNodeId(null), [currentTreeId]);
+  useEffect(() => { setEditingNodeId(null); setDeletingNodeId(null); }, [currentTreeId]);
 
   // 统一的节点点击处理
   const handleNodeClick = async (node: TreeKnowledgeNode) => {
@@ -90,17 +93,20 @@ export const KnowledgeMap: React.FC = () => {
     
     switch (currentView) {
       case 'tree':
-        return <KnowledgeTree onNodeClick={handleNodeClick} onEditNode={setEditingNodeId} toolbar={viewToolbar} />;
+        return <KnowledgeTree onNodeClick={handleNodeClick} onEditNode={setEditingNodeId}
+          onDeleteNode={setDeletingNodeId} toolbar={viewToolbar} />;
       
       case 'mindmap':
         return (
           <div className="flex-1 min-h-0 min-w-0 flex flex-col">
-            <MindMapVisualization onNodeClick={handleNodeClick} onEditNode={setEditingNodeId} toolbar={viewToolbar} />
+            <MindMapVisualization onNodeClick={handleNodeClick} onEditNode={setEditingNodeId}
+              onDeleteNode={setDeletingNodeId} toolbar={viewToolbar} />
           </div>
         );
       
       default:
-        return <KnowledgeTree onNodeClick={handleNodeClick} onEditNode={setEditingNodeId} toolbar={viewToolbar} />;
+        return <KnowledgeTree onNodeClick={handleNodeClick} onEditNode={setEditingNodeId}
+          onDeleteNode={setDeletingNodeId} toolbar={viewToolbar} />;
     }
   };
 
@@ -171,6 +177,14 @@ export const KnowledgeMap: React.FC = () => {
             if (useKnowledgeStore.getState().currentTreeId !== treeId) return;
             setFocusNode(nodeId);
             if (options.regenerateNote) void generateNote(nodeId, treeId, true);
+          }} />
+      )}
+      {/* 两种视图共用删除确认；“否”只关弹窗，“是”递归删除并同步节点状态。 */}
+      {deletingNodeId !== null && currentTreeId !== null && (
+        <NodeDeleteDialog key={deletingNodeId} onCancel={() => setDeletingNodeId(null)}
+          onConfirm={async () => {
+            await deleteNodeSubtree(deletingNodeId, currentTreeId);
+            setDeletingNodeId(null);
           }} />
       )}
     </div>

@@ -1010,6 +1010,44 @@ app.patch('/api/tree/:treeId/node/:nodeId', async (req, res) => {
   }
 });
 
+// 右键删除节点：在事务中连同全部后代删除，根节点删除时一并移除空知识树。
+app.delete('/api/tree/:treeId/node/:nodeId', async (req, res) => {
+  const treeId = Number(req.params.treeId);
+  const nodeId = Number(req.params.nodeId);
+  if (![treeId, nodeId].every(id => Number.isSafeInteger(id) && id > 0)) {
+    return res.status(400).json({ error: '无效的知识树或节点 ID' });
+  }
+  try {
+    const result = await withTransaction(async () => {
+      const node = await dbGet('SELECT id, parent_id FROM knowledge_nodes WHERE id = ? AND tree_id = ?', [nodeId, treeId]);
+      if (!node) { const error = new Error('节点不存在或不属于该知识树'); error.status = 404; throw error; }
+      const subtreeSql = `WITH RECURSIVE subtree(id) AS (
+        SELECT id FROM knowledge_nodes WHERE id = ? AND tree_id = ?
+        UNION
+        SELECT child.id FROM knowledge_nodes child JOIN subtree parent ON child.parent_id = parent.id WHERE child.tree_id = ?
+      )`;
+      const params = [nodeId, treeId, treeId];
+      const descendants = await dbAll(`${subtreeSql} SELECT id FROM subtree`, params);
+      const deleted = await dbRun(`${subtreeSql} DELETE FROM knowledge_nodes WHERE tree_id = ? AND id IN (SELECT id FROM subtree)`, [...params, treeId]);
+      if (node.parent_id === null) {
+        await dbRun('DELETE FROM knowledge_trees WHERE id = ?', [treeId]);
+      } else {
+        // 删除最后一个子节点后重新开放父节点的展开入口。
+        await dbRun(`UPDATE knowledge_nodes SET children_generated = 0, note_generation_paused = 1
+          WHERE id = ? AND tree_id = ? AND NOT EXISTS (
+            SELECT 1 FROM knowledge_nodes WHERE parent_id = ? AND tree_id = ?
+          )`, [node.parent_id, treeId, node.parent_id, treeId]);
+      }
+      return { success: true, deletedNodes: deleted.changes,
+        deletedNodeIds: descendants.map(item => item.id), deletedTree: node.parent_id === null };
+    });
+    res.json(result);
+  } catch (error) {
+    if (!error.status) console.error('删除节点失败:', error);
+    res.status(error.status || 500).json({ error: error.status ? error.message : '删除节点失败，请稍后重试' });
+  }
+});
+
 // 删除知识树及其所有节点
 app.delete('/api/tree/:treeId', async (req, res) => {
   const treeId = Number(req.params.treeId);

@@ -57,6 +57,10 @@ export const knowledgeApi = {
   // 服务端先规划新子节点，再在事务内替换旧子树。
   regenerateChildren: (treeId: number, nodeId: number) =>
     apiRequest<{ success: boolean }>(`/tree/${treeId}/node/${nodeId}/regenerate-children`, { method: 'POST' }),
+  // 删除节点及所有后代，返回实际删除的 ID 供两种视图立即同步。
+  deleteNodeSubtree: (treeId: number, nodeId: number) =>
+    apiRequest<{ success: boolean; deletedNodes: number; deletedNodeIds: number[]; deletedTree: boolean }>(
+      `/tree/${treeId}/node/${nodeId}`, { method: 'DELETE' }),
   // 创建新知识树
   createTree: (userPrompt: string, userId: number = 1) =>
     apiRequest<{
