@@ -1,5 +1,5 @@
 import type { DbKnowledgeNode, KnowledgeTree } from '../../types';
-import { buildTreeStructure } from '../../utils/knowledgeTreeUtils';
+import { buildTreeStructure, hasKnowledgeNodeStar } from '../../utils/knowledgeTreeUtils';
 
 interface PdfPage {
   image: Uint8Array;
@@ -75,16 +75,16 @@ export async function downloadTreePdf(tree: KnowledgeTree, nodes: DbKnowledgeNod
   measure.font = `14px ${font}`;
   const rows = entries.map(({ node, depth }) => {
     const indent = Math.min(depth, 12) * 18;
-    const maxWidth = pageWidth - margin * 2 - indent;
+    // 与界面一样，仅显示名称、重点星标和学习状态；为右侧状态徽标留出空间。
+    const maxWidth = pageWidth - margin * 2 - indent - 92;
     const lines: string[] = [];
     let line = '';
-    Array.from(node.title || '未命名节点').forEach(char => {
+    Array.from(`${node.title || '未命名节点'}${hasKnowledgeNodeStar(node) ? ' ⭐' : ''}`).forEach(char => {
       if (line && measure.measureText(line + char).width > maxWidth) { lines.push(line); line = char; }
       else line += char;
     });
     if (line) lines.push(line);
-    const metadata = [node.is_core ? '核心' : '', node.importance === 'high' ? '重要 *' : '', `难度：${node.difficulty || '未设置'}`, node.is_learned ? '已学习' : '未学习'].filter(Boolean).join('  ·  ');
-    return { node, indent, lines, metadata, height: Math.max(38, lines.length * 18 + 18) };
+    return { node, depth, indent, lines, height: Math.max(38, lines.length * 18 + 14) };
   });
   const pageRows: typeof rows[] = [];
   let current: typeof rows = [];
@@ -110,7 +110,7 @@ export async function downloadTreePdf(tree: KnowledgeTree, nodes: DbKnowledgeNod
     context.fillText(tree.root_topic || '知识树', margin, 46, pageWidth - margin * 2);
     context.fillStyle = '#718097';
     context.font = `10px ${font}`;
-    context.fillText(`共 ${entries.length} 个节点 · 树状列表`, margin, 70);
+    context.fillText('树状视图', margin, 70);
     context.textAlign = 'right';
     context.fillText(`${pageIndex + 1} / ${pageRows.length}`, pageWidth - margin, 70);
     context.textAlign = 'left';
@@ -118,12 +118,30 @@ export async function downloadTreePdf(tree: KnowledgeTree, nodes: DbKnowledgeNod
     items.forEach((row, rowIndex) => {
       context.fillStyle = row.node.is_learned ? '#ecfdf5' : rowIndex % 2 ? '#f8faff' : '#fff';
       context.fillRect(margin, y, pageWidth - margin * 2, row.height);
-      context.fillStyle = row.node.is_learned ? '#059669' : row.node.is_core ? '#ea580c' : '#20304a';
-      context.font = `14px ${font}`;
+      // 导出树状视图沿用屏幕上的虚线层级、学习完成色和右侧状态徽标。
+      context.save();
+      context.setLineDash([3, 3]);
+      context.strokeStyle = '#cbd5e1';
+      for (let depth = 1; depth <= Math.min(row.depth, 12); depth += 1) {
+        const x = margin + depth * 18 - 9;
+        context.beginPath();
+        context.moveTo(x, y);
+        context.lineTo(x, y + row.height);
+        context.stroke();
+      }
+      context.restore();
+      context.fillStyle = row.node.is_learned ? '#065f46' : '#20304a';
+      context.font = `${row.depth === 0 ? 'bold ' : ''}14px ${font}`;
       row.lines.forEach((text, lineIndex) => context.fillText(text, margin + row.indent, y + 17 + lineIndex * 18, pageWidth - margin * 2 - row.indent));
-      context.fillStyle = '#718097';
-      context.font = `9px ${font}`;
-      context.fillText(row.metadata, margin + row.indent, y + row.height - 4, pageWidth - margin * 2 - row.indent);
+      context.fillStyle = row.node.is_learned ? '#d1fae5' : '#f1f5f9';
+      context.beginPath();
+      context.roundRect(pageWidth - margin - 75, y + (row.height - 22) / 2, 75, 22, 11);
+      context.fill();
+      context.fillStyle = row.node.is_learned ? '#047857' : '#475569';
+      context.font = `10px ${font}`;
+      context.textAlign = 'center';
+      context.fillText(row.node.is_learned ? '✓ 已学习' : '○ 未学习', pageWidth - margin - 37.5, y + row.height / 2 + 3);
+      context.textAlign = 'left';
       y += row.height;
     });
     context.fillStyle = '#94a3b8';
@@ -142,21 +160,21 @@ export async function downloadTreePdf(tree: KnowledgeTree, nodes: DbKnowledgeNod
 export function downloadMindmapSvg(tree: KnowledgeTree, nodes: DbKnowledgeNode[]) {
   const roots = buildTreeStructure(nodes);
   if (!roots.length) throw new Error('当前知识树没有可导出的节点');
-  const nodeWidth = 280;
-  const horizontalGap = 160;
-  const verticalGap = 42;
-  const marginX = 56;
-  const marginY = 84;
+  // 导出完整节点结构，并复用当前导图的节点尺寸、间距和文字换行规则。
+  const nodeWidth = 230;
+  const horizontalGap = 145;
+  const verticalGap = 28;
+  const marginX = 50;
+  const marginY = 50;
   type Layout = { node: (typeof roots)[number]; depth: number; x: number; y: number; height: number; lines: string[] };
   const layouts: Layout[] = [];
   const wrap = (value: string) => {
     const chars = Array.from(value || '未命名节点');
     const lines: string[] = [];
-    while (chars.length && lines.length < 3) lines.push(chars.splice(0, 13).join(''));
-    if (chars.length && lines.length) lines[lines.length - 1] += '…';
+    while (chars.length) lines.push(chars.splice(0, 16).join(''));
     return lines;
   };
-  const nodeHeight = (lines: string[]) => 58 + lines.length * 22;
+  const nodeHeight = (lines: string[]) => Math.max(72, 42 + lines.length * 18);
   const subtreeHeight = (node: (typeof roots)[number]): number => {
     const children = node.children ?? [];
     if (!children.length) return nodeHeight(wrap(node.title));
@@ -166,23 +184,18 @@ export function downloadMindmapSvg(tree: KnowledgeTree, nodes: DbKnowledgeNode[]
     const lines = wrap(node.title);
     const height = nodeHeight(lines);
     const children = node.children ?? [];
-    if (!children.length) {
-      layouts.push({ node, depth, x: marginX + depth * (nodeWidth + horizontalGap), y: top, height, lines });
-      return;
-    }
-    const groupHeight = children.reduce((sum, child) => sum + subtreeHeight(child), 0) + verticalGap * (children.length - 1);
-    let childTop = top + (Math.max(height, groupHeight) - groupHeight) / 2;
+    const groupHeight = children.length
+      ? children.reduce((sum, child) => sum + subtreeHeight(child), 0) + verticalGap * (children.length - 1)
+      : 0;
+    const y = top + Math.max(0, (groupHeight - height) / 2);
+    layouts.push({ node, depth, x: marginX + depth * (nodeWidth + horizontalGap), y, height, lines });
+    let childTop = top + Math.max(0, (height - groupHeight) / 2);
     children.forEach(child => { place(child, depth + 1, childTop); childTop += subtreeHeight(child) + verticalGap; });
-    const descendants = layouts.filter(item => children.some(child => child.id === item.node.id));
-    const first = descendants[0];
-    const last = descendants[descendants.length - 1];
-    const center = ((first.y + first.height / 2) + (last.y + last.height / 2)) / 2;
-    layouts.push({ node, depth, x: marginX + depth * (nodeWidth + horizontalGap), y: center - height / 2, height, lines });
   };
   let nextY = marginY;
   roots.forEach(root => { place(root, 0, nextY); nextY += subtreeHeight(root) + verticalGap; });
   const width = Math.max(900, ...layouts.map(item => item.x + nodeWidth + marginX));
-  const height = Math.max(500, nextY + marginY);
+  const height = Math.max(500, ...layouts.map(item => item.y + item.height + marginY));
   const byId = new Map(layouts.map(item => [item.node.id, item]));
   const escapeXml = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[character]!));
   const connectors = layouts.flatMap(parent => (parent.node.children ?? []).map(child => {
@@ -193,16 +206,28 @@ export function downloadMindmapSvg(tree: KnowledgeTree, nodes: DbKnowledgeNode[]
     const x2 = target.x;
     const y2 = target.y + target.height / 2;
     const control = (x1 + x2) / 2;
-    return `<path d="M ${x1} ${y1} C ${control} ${y1}, ${control} ${y2}, ${x2} ${y2}" fill="none" stroke="#7895c5" stroke-width="3"/>`;
+    const relation = child.relation_type || 'PART_OF';
+    const dash = relation === 'RELATED' ? ' stroke-dasharray="5 5"' : '';
+    const arrow = relation === 'LEADS_TO' || relation === 'PREREQUISITE' ? ' marker-end="url(#arrow)"' : '';
+    return `<path d="M ${x1} ${y1} C ${control} ${y1}, ${control} ${y2}, ${x2} ${y2}" fill="none" stroke="#3b82f6" stroke-width="2"${dash}${arrow}/>`;
   })).join('');
   const cards = layouts.map(item => {
     const node = item.node;
-    const titleY = item.y + 30 - (item.lines.length - 1) * 9;
-    const title = item.lines.map((line, index) => `<tspan x="${item.x + nodeWidth / 2}" dy="${index ? 22 : 0}">${escapeXml(line)}</tspan>`).join('');
-    const metadata = [node.is_core ? '核心' : '', node.importance === 'high' ? '重要 *' : '', `难度：${node.difficulty || '未设置'}`, node.is_learned ? '已学习' : '未学习'].filter(Boolean).join(' · ');
-    return `<g><rect x="${item.x}" y="${item.y}" width="${nodeWidth}" height="${item.height}" rx="14" fill="${node.is_learned ? '#ecfdf5' : '#fff'}" stroke="${node.is_learned ? '#10b981' : node.is_core ? '#ea580c' : '#7895c5'}" stroke-width="3"/><text x="${item.x + nodeWidth / 2}" y="${titleY}" text-anchor="middle" font-family="Microsoft YaHei, SimSun, sans-serif" font-size="18" font-weight="600" fill="#20304a">${title}</text><text x="${item.x + nodeWidth / 2}" y="${item.y + item.height - 16}" text-anchor="middle" font-family="Microsoft YaHei, SimSun, sans-serif" font-size="12" fill="#718097">${escapeXml(metadata)}</text></g>`;
+    const hasStar = hasKnowledgeNodeStar(node);
+    const title = item.lines.map((line, index) => `<tspan x="${nodeWidth / 2}" dy="${index ? 16 : 0}">${escapeXml(line)}</tspan>`).join('');
+    const metadata = `${node.is_learned ? '已学习' : '未学习'}${hasStar ? ' · ⭐' : ''}`;
+    const fill = hasStar ? '#fff8e6' : '#f0f4f8';
+    const borderWidth = node.importance === 'high' ? 3 : node.importance === 'medium' ? 2 : 1;
+    const badgeFill = node.is_learned ? '#059669' : '#fff7ed';
+    const badgeStroke = node.is_learned ? '#059669' : '#f59e0b';
+    const badgeText = node.is_learned ? '✓' : '○';
+    const relationDot = node.relation_type && node.relation_type !== 'PART_OF'
+      ? '<circle cx="10" cy="10" r="4" fill="#3b82f6"/>' : '';
+    // 与当前导图一致：节点底色由星标决定，学习状态用右上角圆标及底部文字表示。
+    return `<g transform="translate(${item.x} ${item.y})"><rect width="${nodeWidth}" height="${item.height}" rx="8" fill="${fill}" stroke="#3b82f6" stroke-width="${borderWidth}"/>${relationDot}<text x="${nodeWidth / 2}" y="22" text-anchor="middle" font-family="Microsoft YaHei, SimSun, sans-serif" font-size="12" font-weight="600" fill="#24334f">${title}</text><text x="${nodeWidth / 2}" y="${item.height - 12}" text-anchor="middle" font-family="Microsoft YaHei, SimSun, sans-serif" font-size="10" fill="#64748b">${escapeXml(metadata)}</text><circle cx="${nodeWidth - 15}" cy="15" r="8" fill="${badgeFill}" stroke="${badgeStroke}" stroke-width="1.5"/><text x="${nodeWidth - 15}" y="19" text-anchor="middle" font-family="Microsoft YaHei, SimSun, sans-serif" font-size="12" fill="${node.is_learned ? '#fff' : '#b45309'}">${badgeText}</text></g>`;
   }).join('');
   const title = escapeXml(tree.root_topic || '知识图谱');
-  const svg = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${width}px" height="${height}px" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#fff"/><text x="${marginX}" y="42" font-family="Microsoft YaHei, SimSun, sans-serif" font-size="28" font-weight="700" fill="#20304a">${title}</text>${connectors}${cards}</svg>`;
+  // 导出画布统一为纯白，避免 SVG 边界内外出现浅蓝与白色的分界。
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${width}px" height="${height}px" viewBox="0 0 ${width} ${height}"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="3" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L0 6 L9 3 Z" fill="#3b82f6"/></marker></defs><rect width="100%" height="100%" fill="#fff"/><text x="${marginX}" y="34" font-family="Microsoft YaHei, SimSun, sans-serif" font-size="20" font-weight="700" fill="#20304a">${title}</text>${connectors}${cards}</svg>`;
   downloadBlob(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), `${safeFilename(tree.root_topic)}-思维导图.svg`);
 }

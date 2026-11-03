@@ -1,6 +1,11 @@
 // src/utils/knowledgeTreeUtils.ts
 import type { TreeKnowledgeNode, DbKnowledgeNode } from '../types';
 
+// 树状视图、思维导图及其导出文件共用同一套重点星标判定。
+export const hasKnowledgeNodeStar = (node: Pick<DbKnowledgeNode, 'is_core' | 'is_boundary' | 'importance' | 'relation_type'>) =>
+  Boolean(node.is_core || node.is_boundary || node.importance === 'high' ||
+    (node.relation_type && node.relation_type !== 'PART_OF'));
+
 export const buildTreeStructure = (nodes: DbKnowledgeNode[]): TreeKnowledgeNode[] => {
   
   // 添加调试日志

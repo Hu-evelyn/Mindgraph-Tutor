@@ -1,6 +1,7 @@
 import React from 'react';
 import { AcademicCapIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import type { TreeKnowledgeNode } from '../../types';
+import { hasKnowledgeNodeStar } from '../../utils/knowledgeTreeUtils';
 
 
 
@@ -57,10 +58,7 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
   };
 
   // 改进分支将多个元数据标签合为重点星标，避免树状视图过密。
-  const hasStarTag = Boolean(
-    node.is_core || node.importance === 'high' || node.is_boundary ||
-    (node.relation_type && node.relation_type !== 'PART_OF')
-  );
+  const hasStarTag = hasKnowledgeNodeStar(node);
 
   return (
     <div className="relative">

@@ -11,35 +11,6 @@ interface KnowledgeFileActionsProps {
   mode?: 'both' | 'import' | 'export';
 }
 
-function downloadGraph(tree: KnowledgeTree, nodes: DbKnowledgeNode[]) {
-  const graph = {
-    format: 'mindgraph-tutor-graph',
-    version: 1,
-    title: tree.root_topic,
-    exportedAt: new Date().toISOString(),
-    nodes: nodes.map(node => ({
-      id: node.id,
-      parentId: node.parent_id,
-      label: node.label,
-      content: node.content || '',
-      is_learned: Boolean(node.is_learned),
-      relation_type: node.relation_type || 'PART_OF',
-      importance: node.importance || 'medium',
-      difficulty: node.difficulty || 'medium',
-      estimated_time: node.estimated_time || '30分钟',
-      is_boundary: Boolean(node.is_boundary),
-      is_core: Boolean(node.is_core),
-    })),
-  };
-  const blob = new Blob([JSON.stringify(graph, null, 2)], { type: 'application/json;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `${tree.root_topic.replace(/[\\/:*?"<>|]/g, '_') || 'knowledge-graph'}.json`;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
 async function fileToBase64(file: File) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   let binary = '';
@@ -73,7 +44,7 @@ export function KnowledgeFileActions({ tree, nodes, mode = 'both' }: KnowledgeFi
           ? await knowledgeApi.importDocument({ fileName: file.name, pdfBase64: await fileToBase64(file) })
           : await knowledgeApi.importDocument({ fileName: file.name, content: await file.text() });
       } else {
-        throw new UserMessageError('支持导入本应用导出的 JSON 图谱，以及 PDF、TXT、Markdown 学习资料');
+        throw new UserMessageError('支持导入 MindGraph-Tutor 格式的 JSON 图谱，以及 PDF、TXT、Markdown 学习资料');
       }
       await loadUserTrees();
       setCurrentTree(result.treeId);
@@ -101,6 +72,7 @@ export function KnowledgeFileActions({ tree, nodes, mode = 'both' }: KnowledgeFi
       {mode !== 'import' && tree && <div className="relative">
         <button type="button" className="mt-soft-button h-10 px-3 text-sm"
           onClick={() => setExportMenuOpen(open => !open)} disabled={!nodes.length} aria-expanded={exportMenuOpen}>导出图谱 ▾</button>
+        {/* 导出只提供与当前两种视图对应的 PDF 和 SVG；JSON 导出入口已移除。 */}
         {exportMenuOpen && <div className="mt-surface absolute right-0 top-full z-50 mt-2 flex min-w-48 flex-col gap-1 p-2 shadow-xl">
           <button type="button" className="rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50"
             onClick={() => { setExportMenuOpen(false); void downloadTreePdf(tree, nodes).catch(error => { console.error('PDF 导出失败:', error); window.alert('导出失败，请稍后重试'); }); }}>导出树状视图 PDF</button>
@@ -110,8 +82,6 @@ export function KnowledgeFileActions({ tree, nodes, mode = 'both' }: KnowledgeFi
               try { downloadMindmapSvg(tree, nodes); }
               catch (error) { console.error('SVG 导出失败:', error); window.alert('导出失败，请稍后重试'); }
             }}>导出思维导图 SVG</button>
-          <button type="button" className="rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50"
-            onClick={() => { setExportMenuOpen(false); downloadGraph(tree, nodes); }}>导出 JSON 备份</button>
         </div>}
       </div>}
       {/* 对话输入行中的提示悬浮显示，避免导入反馈把输入框或发送按钮挤走。 */}

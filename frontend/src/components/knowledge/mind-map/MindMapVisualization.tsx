@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useKnowledgeStore } from '../../../stores/useKnowledgeStore';
 import type { TreeKnowledgeNode } from '../../../types';
-import { buildTreeStructure } from '../../../utils/knowledgeTreeUtils';
+import { buildTreeStructure, hasKnowledgeNodeStar } from '../../../utils/knowledgeTreeUtils';
 import { ContextMenu } from '../ContextMenu';
 import './MindMapVisualization.css';
 
@@ -406,7 +406,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       }
       group.classList.add(`importance-${importance}`);
       group.classList.add(node.is_learned ? 'node-learned' : 'node-unlearned');
-      const hasStarTag = Boolean(isCore || isBoundary || importance === 'high' || relationType !== 'PART_OF');
+      const hasStarTag = hasKnowledgeNodeStar(node);
       group.classList.add(hasStarTag ? 'node-important' : 'node-regular');
       if (isFocused) group.classList.add('node-focused');
       const nodeTitle = document.createElementNS('http://www.w3.org/2000/svg', 'title');
