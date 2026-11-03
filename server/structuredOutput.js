@@ -61,15 +61,25 @@ function validateChild(value, index) {
   };
 }
 
+// Accept JSON with optional surrounding whitespace or a single Markdown code block.
+function parseModelJson(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) throw new OutputValidationError('模型返回空内容');
+  let text = raw.trim();
+  const fence = text.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i);
+  if (fence) text = fence[1].trim();
+  try { return JSON.parse(text); } catch (cause) {
+    const position = cause.message.match(/position (\d+)/)?.[1];
+    const error = new OutputValidationError('模型结构化响应无法解析');
+    error.code = (position !== undefined && Number(position) >= text.length) || /Unexpected end of JSON/i.test(cause.message)
+      ? 'MODEL_OUTPUT_TRUNCATED' : 'MODEL_JSON_INVALID';
+    error.parseDetails = { position: position === undefined ? null : Number(position), length: text.length };
+    throw error;
+  }
+}
+
 // JSON 模式仅保证格式倾向，写库前仍须校验节点数量、关系类型和必填字段。
 function parseGeneratedOutput(raw, kind) {
-  if (typeof raw !== 'string' || !raw.trim()) throw new OutputValidationError('AI 返回空内容');
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new OutputValidationError('AI 返回的不是合法 JSON');
-  }
+  const parsed = parseModelJson(raw);
   object(parsed, '根对象');
   if (!Array.isArray(parsed.children)) throw new OutputValidationError('children 必须是数组');
 
@@ -99,4 +109,4 @@ function parseGeneratedOutput(raw, kind) {
   return { children, terminal: children.length === 0 };
 }
 
-module.exports = { parseGeneratedOutput, OutputValidationError, MAX_ROOT_CHILDREN, MAX_EXPAND_CHILDREN };
+module.exports = { parseModelJson, parseGeneratedOutput, OutputValidationError, MAX_ROOT_CHILDREN, MAX_EXPAND_CHILDREN };

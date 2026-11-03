@@ -9,6 +9,7 @@ import './MindMapVisualization.css';
 interface MindMapVisualizationProps {
   onNodeClick?: (node: TreeKnowledgeNode) => void;
   onEditNode: (nodeId: number) => void;
+  onDeleteNode: (nodeId: number) => void;
   toolbar: React.ReactNode;
 }
 
@@ -23,6 +24,7 @@ interface NodeLayout extends TreeKnowledgeNode {
 export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({ 
   onNodeClick,
   onEditNode,
+  onDeleteNode,
   toolbar,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -118,8 +120,8 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     setFocusNode,
     getCurrentTreeNodes,
     expandNode,
-    toggleNodeExpansion,
     markNodeLearned,
+    toggleNodeExpansion,
     revealVersion,
   } = useKnowledgeStore();
 
@@ -198,7 +200,8 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   // 放大时扩展实际 SVG 画布尺寸，从而让视口出现可拖动的上下/左右滚动条。
   // 计算缩放前鼠标所在的画布比例，缩放后调整 scrollLeft/Top，保持该位置锚定在鼠标下。
   const handleZoomChange = (newZoom: number, clientX?: number, clientY?: number) => {
-    const clampedZoom = Math.max(0.3, Math.min(10, newZoom));
+    // 保留 main 已确定的 500% 上限，同时使用新分支的滚轮锚点缩放。
+    const clampedZoom = Math.max(0.3, Math.min(5, newZoom));
     if (clampedZoom === zoomRef.current) return;
     const viewport = viewportRef.current;
     const svg = svgRef.current;
@@ -408,8 +411,8 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       nodeTitle.textContent = `${node.title} · ${node.is_learned ? '已学习' : '未学习'}`;
       group.appendChild(nodeTitle);
 
+      const learnedBadge = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       {
-        const learnedBadge = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         const badge = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         badge.setAttribute('cx', (node.width - 15).toString());
         badge.setAttribute('cy', '15');
@@ -426,7 +429,20 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
         check.textContent = node.is_learned ? '✓' : '○';
         learnedBadge.append(badge);
         learnedBadge.appendChild(check);
-        group.appendChild(learnedBadge);
+        // 右键菜单继续提供编辑、展开、删除；状态圆标可直接切换学习状态。
+        learnedBadge.setAttribute('role', 'button');
+        learnedBadge.setAttribute('tabindex', '0');
+        learnedBadge.setAttribute('aria-label', node.is_learned ? `标记${node.title}为未学习` : `标记${node.title}为已学习`);
+        learnedBadge.style.cursor = 'pointer';
+        learnedBadge.addEventListener('click', event => {
+          event.stopPropagation();
+          void toggleLearned(node);
+        });
+        learnedBadge.addEventListener('keydown', event => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault(); event.stopPropagation();
+          void toggleLearned(node);
+        });
       }
 
       //// 根据节点属性设置颜色
@@ -477,7 +493,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       titleText.setAttribute('x', (node.width / 2).toString());
       titleText.setAttribute('y', '22');
       titleText.setAttribute('text-anchor', 'middle');
-      titleText.setAttribute('fill', isFocused ? 'white' : '#334155');
+      titleText.setAttribute('fill', isFocused && !node.is_learned ? 'white' : '#334155');
       titleText.setAttribute('font-size', '12');
       titleText.setAttribute('font-weight', '600');
       titleText.setAttribute('pointer-events', 'none');
@@ -501,13 +517,15 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       metaText.setAttribute('x', (node.width / 2).toString());
       metaText.setAttribute('y', (node.height - 12).toString());
       metaText.setAttribute('text-anchor', 'middle');
-      metaText.setAttribute('fill', isFocused ? 'white' : '#6b7280');
+      metaText.setAttribute('fill', isFocused && !node.is_learned ? 'white' : '#6b7280');
       metaText.setAttribute('font-size', '10');
       metaText.textContent = `难度：${node.difficulty || '未设置'} · ${node.is_learned ? '已学习' : '未学习'}${hasStarTag ? ' · ⭐' : ''}`;
       
       group.appendChild(rect);
       group.appendChild(titleText);
       group.appendChild(metaText);
+      // SVG 后绘制的元素在上层，状态圆标需盖在节点背景上才能点击。
+      group.appendChild(learnedBadge);
       svg.appendChild(group);
       
       // 添加点击事件
@@ -601,21 +619,19 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     setContextMenu(null);
   };
 
-  // 右键所指节点直接切换学习状态，不依赖工具栏中当前选中的节点。
-  const handleToggleLearned = () => {
-    if (!contextMenu) return;
-    const { id, is_learned } = contextMenu.node;
-    setContextMenu(null);
+  const toggleLearned = async (node: TreeKnowledgeNode) => {
     setLearningError('');
-    if (!is_learned) {
-      setCelebratingNodeId(id);
-      if (celebrationTimer.current !== null) window.clearTimeout(celebrationTimer.current);
-      celebrationTimer.current = window.setTimeout(() => setCelebratingNodeId(null), 850);
+    try {
+      await markNodeLearned(node.id, !node.is_learned);
+      if (!node.is_learned) {
+        setCelebratingNodeId(node.id);
+        if (celebrationTimer.current !== null) window.clearTimeout(celebrationTimer.current);
+        celebrationTimer.current = window.setTimeout(() => setCelebratingNodeId(null), 850);
+      }
+    } catch (error) {
+      setLearningError(error instanceof Error ? error.message : '更新学习状态失败，请重试');
     }
-    void markNodeLearned(id, !is_learned)
-      .catch(error => setLearningError(error instanceof Error ? error.message : '请重试'));
   };
-
   // 辅助函数：根据关系类型获取颜色
   // 替换原来的 getRelationColor 函数
   function getRelationColor(relationType: string): string {
@@ -668,7 +684,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   <div className="mind-map-container" ref={containerRef}>
     {/* 视觉统一：导图工具栏复用柔和按钮样式，缩放及重置处理函数保持不变。 */}
     <div className="mind-map-controls-fixed">
-      {/* 两行顺序调整：搜索、帮助、视图切换和导出在上，重置与缩放在下。 */}
+      {/* 两行顺序调整：搜索、视图切换和导出在上，重置与缩放在下。 */}
       <div className="flex min-w-0 items-center">{toolbar}</div>
       <div className="mt-3 flex justify-between items-center gap-3">
     
@@ -679,7 +695,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
           >
             重置视图
           </button>
-          {/* 编辑与学习状态操作已移入节点右键菜单，中间工具栏只保留视图控制。 */}
+          {/* 节点操作位于右键菜单，中间工具栏只保留视图控制。 */}
           <div className="flex items-center gap-3 text-sm text-gray-600">
             {/* 缩放控制按钮 */}
             <div className="mt-view-switcher flex items-center gap-1 p-1">
@@ -706,7 +722,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
               <input
                 type="range"
                 min="30"
-                max="1000"
+                max="500"
                 value={zoom * 100}
                 onChange={(e) => handleZoomChange(parseInt(e.target.value) / 100)}
                 className="w-24 accent-[var(--mt-accent)]"
@@ -728,7 +744,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
           </button>
         </div>
       )}
-      {learningError && <div role="alert" className="mt-2 text-sm text-red-700">学习状态保存失败：{learningError}</div>}
+      {learningError && <p role="alert" className="mt-2 text-sm text-red-700">{learningError}</p>}
     </div>
 
     
@@ -769,8 +785,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
         onClose={() => setContextMenu(null)}
         onExpand={handleExpandNode}
         onEdit={() => { onEditNode(contextMenu.node.id); setContextMenu(null); }}
-        isLearned={Boolean(contextMenu.node.is_learned)}
-        onToggleLearned={handleToggleLearned}
+        onDelete={() => { onDeleteNode(contextMenu.node.id); setContextMenu(null); }}
       />
     )}
   </div>

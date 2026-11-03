@@ -26,6 +26,7 @@ export interface DbKnowledgeNode {
   is_learned: boolean;
   children_generated?: number;
   note_is_manual?: number; // 手工保存的笔记不再触发自动生成
+  note_generation_paused?: number; // 编辑节点后选择保留笔记时暂停自动生成
   relation_type?: string;      
   importance?: string;          
   difficulty?: string;          
@@ -62,6 +63,7 @@ export interface TreeKnowledgeNode {
 
 // 知识树类型（对应后端的 knowledge_trees）
 export interface KnowledgeTree {
+  source_file_name?: string | null;
   dataset_id?: string | null;
   dataset_revision?: number;
   id: number;

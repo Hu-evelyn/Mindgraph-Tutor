@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useKnowledgeStore } from '../../stores/useKnowledgeStore';
-import { knowledgeApi } from '../../services/api';
+import { knowledgeApi, UserMessageError } from '../../services/api';
 import type { DbKnowledgeNode, KnowledgeTree } from '../../types';
 import { downloadMindmapSvg, downloadTreePdf } from './knowledgeGraphExport';
 
@@ -61,25 +61,26 @@ export function KnowledgeFileActions({ tree, nodes, mode = 'both' }: KnowledgeFi
     setIsImporting(true);
     setMessage('');
     try {
-      if (file.size > 15 * 1024 * 1024) throw new Error('文件不能超过 15 MB');
+      if (file.size > 15 * 1024 * 1024) throw new UserMessageError('文件不能超过 15 MB');
       let result: { treeId: number };
       const extension = file.name.split('.').pop()?.toLowerCase();
       if (extension === 'json') {
         const graph = JSON.parse(await file.text());
         result = await knowledgeApi.importTree(graph);
       } else if (['pdf', 'txt', 'md'].includes(extension || '')) {
-        if (file.size > 10 * 1024 * 1024) throw new Error('文件不能超过 10 MB');
+        if (file.size > 10 * 1024 * 1024) throw new UserMessageError('文件不能超过 10 MB');
         result = extension === 'pdf'
           ? await knowledgeApi.importDocument({ fileName: file.name, pdfBase64: await fileToBase64(file) })
           : await knowledgeApi.importDocument({ fileName: file.name, content: await file.text() });
       } else {
-        throw new Error('支持导入本应用导出的 JSON 图谱，以及 PDF、TXT、Markdown 学习资料');
+        throw new UserMessageError('支持导入本应用导出的 JSON 图谱，以及 PDF、TXT、Markdown 学习资料');
       }
       await loadUserTrees();
       setCurrentTree(result.treeId);
       setMessage('导入完成，已切换到新知识树');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '导入失败，请检查文件后重试');
+      console.error('文件导入失败:', error);
+      setMessage(error instanceof UserMessageError ? error.message : error instanceof SyntaxError ? '图谱文件格式有误，请检查文件后重新导入' : '导入失败，请检查文件后重试');
     } finally {
       setIsImporting(false);
       if (inputRef.current) inputRef.current.value = '';
@@ -102,12 +103,12 @@ export function KnowledgeFileActions({ tree, nodes, mode = 'both' }: KnowledgeFi
           onClick={() => setExportMenuOpen(open => !open)} disabled={!nodes.length} aria-expanded={exportMenuOpen}>导出图谱 ▾</button>
         {exportMenuOpen && <div className="mt-surface absolute right-0 top-full z-50 mt-2 flex min-w-48 flex-col gap-1 p-2 shadow-xl">
           <button type="button" className="rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50"
-            onClick={() => { setExportMenuOpen(false); void downloadTreePdf(tree, nodes).catch(error => window.alert(error instanceof Error ? error.message : 'PDF export failed')); }}>导出树状视图 PDF</button>
+            onClick={() => { setExportMenuOpen(false); void downloadTreePdf(tree, nodes).catch(error => { console.error('PDF 导出失败:', error); window.alert('导出失败，请稍后重试'); }); }}>导出树状视图 PDF</button>
           <button type="button" className="rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50"
             onClick={() => {
               setExportMenuOpen(false);
               try { downloadMindmapSvg(tree, nodes); }
-              catch (error) { window.alert(error instanceof Error ? error.message : 'SVG export failed'); }
+              catch (error) { console.error('SVG 导出失败:', error); window.alert('导出失败，请稍后重试'); }
             }}>导出思维导图 SVG</button>
           <button type="button" className="rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50"
             onClick={() => { setExportMenuOpen(false); downloadGraph(tree, nodes); }}>导出 JSON 备份</button>
