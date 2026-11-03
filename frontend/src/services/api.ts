@@ -62,10 +62,10 @@ export type NoteStreamEvent =
 interface NoteResult { success: boolean; content: string; cached: boolean }
 
 // Buffer frames across network chunks; TextDecoder preserves split UTF-8 characters.
-async function streamNote(nodeId: number, treeId: number, onEvent: (event: NoteStreamEvent) => void): Promise<NoteResult> {
+async function streamNote(nodeId: number, treeId: number, onEvent: (event: NoteStreamEvent) => void, force = false): Promise<NoteResult> {
   const response = await request(API_BASE_URL + '/generate-note', {
     method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    body: JSON.stringify({ nodeId, treeId }),
+    body: JSON.stringify({ nodeId, treeId, force }),
   });
   if (!response.ok) {
     const details = await response.json().catch(() => null);
@@ -117,7 +117,18 @@ export const knowledgeApi = {
       method: 'POST',
       body: JSON.stringify({ treeId, nodeId, question, history }),
     }),
+  // 流式生成也传递用户的重生成选择。
   generateNote: streamNote,
+  // 摘要由后端依据数据库中当前版本的笔记生成；前端不发送可伪造的正文。
+  summarizeNote: (treeId: number, nodeId: number) =>
+    apiRequest<{ summary: string; cached: boolean }>(`/tree/${treeId}/node/${nodeId}/summary`, { method: 'POST' }),
+  // 服务端先规划新子节点，再在事务内替换旧子树。
+  regenerateChildren: (treeId: number, nodeId: number) =>
+    apiRequest<{ success: boolean }>(`/tree/${treeId}/node/${nodeId}/regenerate-children`, { method: 'POST' }),
+  // 删除节点及所有后代，返回实际删除的 ID 供两种视图立即同步。
+  deleteNodeSubtree: (treeId: number, nodeId: number) =>
+    apiRequest<{ success: boolean; deletedNodes: number; deletedNodeIds: number[]; deletedTree: boolean }>(
+      `/tree/${treeId}/node/${nodeId}`, { method: 'DELETE' }),
   // 创建新知识树
   createTree: (userPrompt: string, userId: number = 1) =>
     apiRequest<{

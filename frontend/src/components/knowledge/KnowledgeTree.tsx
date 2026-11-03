@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useKnowledgeStore } from '../../stores/useKnowledgeStore';
 import { TreeNode } from './TreeNode';
+import { ContextMenu } from './ContextMenu';
 import type { TreeKnowledgeNode } from '../../types';
 import { buildTreeStructure } from '../../utils/knowledgeTreeUtils'; // 导入共享函数
 
@@ -8,11 +9,13 @@ import { buildTreeStructure } from '../../utils/knowledgeTreeUtils'; // 导入�
 interface KnowledgeTreeProps {
   onNodeClick?: (node: TreeKnowledgeNode) => void;
   onEditNode: (nodeId: number) => void;
+  onDeleteNode: (nodeId: number) => void;
   toolbar: ReactNode;
 }
 export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({ 
   onNodeClick,
   onEditNode,
+  onDeleteNode,
   toolbar,
 })=> {
   const { 
@@ -32,6 +35,7 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
   const tree = currentTree();
   const [expansionError, setExpansionError] = useState<string | null>(null);
   const [learningError, setLearningError] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: TreeKnowledgeNode } | null>(null);
   const treeScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -74,9 +78,10 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
   };
 
   // 添加专门的展开/收缩处理函数
-  const handleToggleExpand = async (node: TreeKnowledgeNode) => {
+  const handleToggleExpand = async (node: TreeKnowledgeNode, expandOnly = false) => {
     if (node.children.length > 0) {
-      toggleNodeExpansion(node.id);
+      // 右键菜单的“展开节点”不执行收起；左侧箭头仍可切换展开和收起。
+      if (!expandOnly || !node.isExpanded) toggleNodeExpansion(node.id);
       return;
     }
     if (node.childrenGenerated) return;
@@ -103,7 +108,7 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
         {/* 树状图容器 */}
         {expansionError && (
           <div role="alert" className="mb-3 text-sm text-red-700">
-            扩展失败：{expansionError}。请再次点击节点箭头重试。
+            扩展失败：{expansionError}。请再次右键节点并选择“展开节点”重试。
           </div>
         )}
         {learningError && <div role="alert" className="mb-3 text-sm text-red-700">学习状态保存失败：{learningError}</div>}
@@ -118,8 +123,8 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
             totalSiblings={structuredNodes.length}
             currentFocusNodeId={currentFocusNodeId} // 传递焦点节点ID
             onNodeClick={handleNodeClick}
-            onEditNode={onEditNode}
-            onToggleExpand={handleToggleExpand} // 传入展开/收缩处理函数
+            onOpenContextMenu={(node, x, y) => setContextMenu({ node, x, y })}
+            onToggleExpand={node => { void handleToggleExpand(node); }} // 传入展开/收缩处理函数
             onToggleLearned={node => {
               setLearningError(null);
               void markNodeLearned(node.id, !node.is_learned).catch(error =>
@@ -138,6 +143,14 @@ export const KnowledgeTree: React.FC<KnowledgeTreeProps> = ({
         </div>
         </div>
       </div>
+      {/* 树状视图与思维导图复用同一操作菜单和后续编辑、删除确认流程。 */}
+      {contextMenu && (
+        <ContextMenu x={contextMenu.x} y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          onEdit={() => { onEditNode(contextMenu.node.id); setContextMenu(null); }}
+          onExpand={() => { void handleToggleExpand(contextMenu.node, true); }}
+          onDelete={() => { onDeleteNode(contextMenu.node.id); setContextMenu(null); }} />
+      )}
     </div>
   );
 };

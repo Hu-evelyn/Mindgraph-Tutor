@@ -9,6 +9,7 @@ import './MindMapVisualization.css';
 interface MindMapVisualizationProps {
   onNodeClick?: (node: TreeKnowledgeNode) => void;
   onEditNode: (nodeId: number) => void;
+  onDeleteNode: (nodeId: number) => void;
   toolbar: React.ReactNode;
 }
 
@@ -23,13 +24,13 @@ interface NodeLayout extends TreeKnowledgeNode {
 export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({ 
   onNodeClick,
   onEditNode,
+  onDeleteNode,
   toolbar,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{x: number; y: number; node: TreeKnowledgeNode} | null>(null);
   const [expansionError, setExpansionError] = useState<{nodeId: number; treeId: number; message: string} | null>(null);
-  const [learningError, setLearningError] = useState('');
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 1000, height: 600 });
   const [isDragging, setIsDragging] = useState(false);
   const panPoint = useRef<{ x: number; y: number } | null>(null);
@@ -45,7 +46,6 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     getCurrentTreeNodes,
     expandNode,
     toggleNodeExpansion,
-    markNodeLearned,
     revealVersion,
   } = useKnowledgeStore();
 
@@ -478,16 +478,6 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     setContextMenu(null);
   };
 
-  // 右键所指节点直接切换学习状态，不依赖工具栏中当前选中的节点。
-  const handleToggleLearned = () => {
-    if (!contextMenu) return;
-    const { id, is_learned } = contextMenu.node;
-    setContextMenu(null);
-    setLearningError('');
-    void markNodeLearned(id, !is_learned)
-      .catch(error => setLearningError(error instanceof Error ? error.message : '请重试'));
-  };
-
   // 辅助函数：根据关系类型获取颜色
   // 替换原来的 getRelationColor 函数
   function getRelationColor(relationType: string): string {
@@ -524,7 +514,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   <div className="mind-map-container" ref={containerRef}>
     {/* 视觉统一：导图工具栏复用柔和按钮样式，缩放及重置处理函数保持不变。 */}
     <div className="mind-map-controls-fixed">
-      {/* 两行顺序调整：搜索、帮助、视图切换和导出在上，重置与缩放在下。 */}
+      {/* 两行顺序调整：搜索、视图切换和导出在上，重置与缩放在下。 */}
       <div className="flex min-w-0 items-center">{toolbar}</div>
       <div className="mt-3 flex justify-between items-center gap-3">
     
@@ -535,7 +525,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
           >
             重置视图
           </button>
-          {/* 编辑与学习状态操作已移入节点右键菜单，中间工具栏只保留视图控制。 */}
+          {/* 节点操作位于右键菜单，中间工具栏只保留视图控制。 */}
           <div className="flex items-center gap-3 text-sm text-gray-600">
             {/* 缩放控制按钮 */}
             <div className="mt-view-switcher flex items-center gap-1 p-1">
@@ -584,7 +574,6 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
           </button>
         </div>
       )}
-      {learningError && <div role="alert" className="mt-2 text-sm text-red-700">学习状态保存失败：{learningError}</div>}
     </div>
 
     
@@ -625,8 +614,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
         onClose={() => setContextMenu(null)}
         onExpand={handleExpandNode}
         onEdit={() => { onEditNode(contextMenu.node.id); setContextMenu(null); }}
-        isLearned={Boolean(contextMenu.node.is_learned)}
-        onToggleLearned={handleToggleLearned}
+        onDelete={() => { onDeleteNode(contextMenu.node.id); setContextMenu(null); }}
       />
     )}
   </div>

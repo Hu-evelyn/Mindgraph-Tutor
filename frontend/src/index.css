@@ -201,12 +201,13 @@ body {
   background: var(--mt-accent-soft);
 }
 
-.mt-kicker {
-  color: #7190c7;
-  font-size: 11px;
+/* 三面板最上方名称统一改为柔和的灰蓝色。 */
+.mt-panel-title {
+  color: #5f789b;
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  line-height: 1.25;
+  letter-spacing: 0.04em;
 }
 
 .mt-muted {
@@ -288,6 +289,20 @@ body {
   border-color: #c8d7fa;
 }
 
+/* 树状视图只保留竖向虚线提示层级，避免横线干扰节点文字。 */
+.mt-tree-branch-line,
+.mt-tree-branch-end,
+.mt-tree-parent-stem {
+  position: absolute;
+  border-left: 1px dashed #cbd5e1;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.mt-tree-branch-line { top: 0; bottom: 0; }
+.mt-tree-branch-end { top: 0; height: 50%; }
+/* 从箭头尖端下方起笔，避免虚线穿过箭头形成“出头”的视觉效果。 */
+.mt-tree-parent-stem { top: calc(50% + 5px); bottom: 0; }
 /* 节点详情和下方对话共用同一张圆角卡片样式，保持两块内容视觉对齐。 */
 .mt-detail-card {
   background: #fff;

@@ -6,7 +6,7 @@ interface NoteEditPanelProps {
   onCancel: () => void;
 }
 
-// 笔记只在右侧知识点详情中编辑，保存区与原笔记卡片保持相同的位置和圆角。
+// 笔记只在右侧“学习笔记”面板中编辑，保存区与原笔记卡片保持相同的位置和圆角。
 export function NoteEditPanel({ content, onSave, onCancel }: NoteEditPanelProps) {
   const [draft, setDraft] = useState(content);
   const [saving, setSaving] = useState(false);
