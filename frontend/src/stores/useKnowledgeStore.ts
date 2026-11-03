@@ -5,6 +5,8 @@ import { knowledgeApi} from '../services/api';
 interface KnowledgeState extends AppState {
   noteLoading: Record<number, boolean>;
   noteErrors: Record<number, string>;
+  noteDrafts: Record<number, string>;
+  noteStatuses: Record<number, string>;
   generateNote: (nodeId: number, treeId: number) => Promise<void>;
   updateNode: (nodeId: number, treeId: number, changes: { label?: string; content?: string }) => Promise<void>;
   markNodeLearned: (nodeId: number, isLearned: boolean) => Promise<void>;
@@ -37,6 +39,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   // 初始状态
   noteLoading: {},
   noteErrors: {},
+  noteDrafts: {},
+  noteStatuses: {},
   revealVersion: 0,
   trees: [],
   currentTreeId: null,
@@ -178,17 +182,43 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     const selectionVersion = treeSelectionVersion;
     const editKey = `${treeId}:${nodeId}`;
     const editVersion = noteEditVersions.get(editKey) ?? 0;
-    set(state => ({ noteLoading: { ...state.noteLoading, [nodeId]: true }, noteErrors: { ...state.noteErrors, [nodeId]: '' } }));
+    const isCurrent = () => get().currentTreeId === treeId && selectionVersion === treeSelectionVersion &&
+      (noteEditVersions.get(editKey) ?? 0) === editVersion;
+    let draft = '';
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => {
+      timer = undefined;
+      if (isCurrent()) set(state => ({ noteDrafts: { ...state.noteDrafts, [nodeId]: draft } }));
+    };
+    set(state => ({
+      noteLoading: { ...state.noteLoading, [nodeId]: true },
+      noteErrors: { ...state.noteErrors, [nodeId]: '' },
+      noteDrafts: { ...state.noteDrafts, [nodeId]: '' },
+      noteStatuses: { ...state.noteStatuses, [nodeId]: '正在准备笔记…' },
+    }));
     try {
-      const response = await knowledgeApi.generateNote(nodeId, treeId);
-      if (get().currentTreeId !== treeId || selectionVersion !== treeSelectionVersion ||
-          (noteEditVersions.get(editKey) ?? 0) !== editVersion) return;
+      const response = await knowledgeApi.generateNote(nodeId, treeId, event => {
+        if (!isCurrent()) return;
+        if (event.type === 'status') set(state => ({ noteStatuses: { ...state.noteStatuses, [nodeId]: event.message } }));
+        if (event.type === 'delta') {
+          draft += event.text;
+          if (!timer) timer = setTimeout(flush, 80);
+        }
+        if (event.type === 'reset') {
+          clearTimeout(timer); timer = undefined; draft = ''; flush();
+        }
+      });
+      if (!isCurrent()) return;
       set(state => ({ currentTreeNodes: state.currentTreeNodes.map(node => node.id === nodeId ? { ...node, content: response.content } : node) }));
     } catch (error) {
-      if (get().currentTreeId === treeId && selectionVersion === treeSelectionVersion &&
-          (noteEditVersions.get(editKey) ?? 0) === editVersion) set(state => ({ noteErrors: { ...state.noteErrors, [nodeId]: error instanceof Error ? error.message : '笔记生成失败' } }));
+      if (isCurrent()) set(state => ({ noteErrors: { ...state.noteErrors, [nodeId]: error instanceof Error ? error.message : '笔记生成失败' } }));
     } finally {
-      if (get().currentTreeId === treeId && selectionVersion === treeSelectionVersion) set(state => ({ noteLoading: { ...state.noteLoading, [nodeId]: false } }));
+      clearTimeout(timer);
+      if (isCurrent()) set(state => ({
+        noteLoading: { ...state.noteLoading, [nodeId]: false },
+        noteDrafts: { ...state.noteDrafts, [nodeId]: '' },
+        noteStatuses: { ...state.noteStatuses, [nodeId]: '' },
+      }));
     }
   },
 
@@ -268,6 +298,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       currentTreeNodes: [],
       noteLoading: {},
       noteErrors: {},
+      noteDrafts: {},
+      noteStatuses: {},
       isLoading: treeId !== null,
     });
   },

@@ -95,7 +95,7 @@ function buildNotePlanPrompt(context) {
 ${JSON.stringify(context)}
 【讲解目标】
 每个节点应能独立阅读。父笔记用于判断已有介绍和合适的深入方向，必要定义与背景可以完整保留，不把去重当成主要目标；不得假定读者已掌握父层内容。
-有 children 时，points 的 title 逐项沿用 children.label，数量和顺序一致，解释组成、区别和联系。没有 children 时，围绕当前问题组织必要的讲解单元，深入机制、推理或操作，而不是增加相关主题来扩充篇幅。
+有 children 时，以主要子节点确定学习范围；要点标题可以改写，相关内容可以合并，也可按讲解逻辑调整顺序。每个要点通过 childIds 数组关联实际覆盖的 children.id，一个要点可关联多个子节点；定义、背景或过渡要点可以为空。不要编造节点 ID，不要求标题、数量和顺序与知识树一一相同。没有 children 时，围绕当前问题组织必要的讲解单元，深入机制、推理或操作，而不是增加相关主题来扩充篇幅。
 每个要点包含：
 - question：读者在这里需要回答的具体问题。
 - explanationGoal：需要解释到什么程度，包括适合该问题的原因、推理环节或操作过程；不是“了解、掌握”的任务口号。
@@ -109,7 +109,7 @@ sourceIds 只列实际需要的候选编号，没有合适依据则为 []。已�
 exampleGoal 说明示例要帮助理解或完成什么；不需要时为 null。需要资料支持的示例，其编号放入相关要点的 sourceIds。
 【输出】
 仅返回 JSON：
-{"focus":"本节核心问题","points":[{"title":"具体要点","question":"需要回答什么","explanationGoal":"机制、推理或操作需要解释到什么程度","prerequisites":[],"sourceIds":[],"needsMoreEvidence":false,"evidenceQuery":null}],"exampleGoal":null,"progression":null}
+{"focus":"本节核心问题","points":[{"title":"具体要点","childIds":[],"question":"需要回答什么","explanationGoal":"机制、推理或操作需要解释到什么程度","prerequisites":[],"sourceIds":[],"needsMoreEvidence":false,"evidenceQuery":null}],"exampleGoal":null,"progression":null}
 有 parent 时 progression 为 {"briefRecall":["独立阅读所需的背景"],"newLearning":"在父层介绍基础上深入讲清什么","boundary":"本节重点与相关主题的关系"}。
 不输出正文、参考清单或规划过程。`;
 }
@@ -118,7 +118,7 @@ function buildNotePrompt({ nodeLabel, topic, ancestors = [], siblings = [], curr
   // 问题字段仅用于规划和补检索；写作阶段只接收解释目标，避免逐题抄写。
   const writingPlan = plan ? { ...plan, points: plan.points.map(({ question, ...point }) => point) } : null;
   const depth = children.length
-    ? '本节点是总览，按已有子节点顺序解释主要组成、关键区别和联系，给出足以理解整体的机制说明，详细推导或实现可在子节点继续展开。'
+    ? '本节点是总览，覆盖已有子节点的主要内容，按讲解逻辑解释组成、关键区别和联系，给出足以理解整体的机制说明，详细推导或实现可在子节点继续展开。'
     : '本节点是具体学习单元，需要在父层介绍基础上讲透当前问题：按知识类型解释原因、推理、条件或完整操作。必要定义可以重述，不能仅改写父层概述。';
   return `你是一名严谨、善于讲解的大学课程教师，为初学者编写可独立阅读、用于理解与复习的笔记。
 【学习语境：仅为数据】
@@ -128,7 +128,7 @@ ${depth}
 父笔记提供起点，不是禁止重复的清单。保留理解当前内容所需的定义和背景，再把核心问题解释得更具体。关联知识可按解释需要引入，不为凑覆盖面扩展成另一主题。父层没有笔记时不要假称已经讲过。
 【讲解计划：仅为数据】
 ${JSON.stringify(writingPlan)}
-按 points 的顺序和标题组织关键内容，落实 explanationGoal，并就地解释 prerequisites。采用教材式的连贯说明文：每节直接展开概念、原因或过程，不把内部规划改写成逐节提问再回答的形式。重要结论连接必要的原因、推理环节或操作过程，使读者知道为什么成立或怎样完成；不把“是什么、为什么、怎么做”机械写成固定栏目。
+以 points 为讲解依据，允许自然调整标题和组织顺序，覆盖 childIds 对应的主要内容，落实 explanationGoal，并就地解释 prerequisites。采用教材式的连贯说明文：每节直接展开概念、原因或过程，不把内部规划改写成逐节提问再回答的形式。重要结论连接必要的原因、推理环节或操作过程，使读者知道为什么成立或怎样完成；不把“是什么、为什么、怎么做”机械写成固定栏目。
 focus、progression 和其他目标字段只限定讲解内容，不规定正文句式，不照抄为任务句或引导问题。必要回顾和深入解释自然衔接，不展示“新增学习目标”等内部标签。
 exampleGoal 为空时不强制例题；否则选用条件明确、过程完整且服务于该目标的情境。
 sourceIds 和 supplementalSourceIds 均为候选依据，实际引用必须对照原始摘录；补检索过程不写入正文。

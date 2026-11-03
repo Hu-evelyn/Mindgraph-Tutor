@@ -7,6 +7,24 @@ export interface TutorChatTurn {
   content: string;
 }
 
+// Errors created here carry user-facing messages only.
+export class UserMessageError extends Error {}
+function requestFailure(endpoint: string): string {
+  if (endpoint === '/import-document') return '资料导入失败，请稍后重试';
+  if (endpoint === '/import-tree') return '图谱导入失败，请稍后重试';
+  if (endpoint === '/generate-tree') return '知识树生成失败，请稍后重试';
+  if (endpoint === '/expand-node') return '节点展开失败，请稍后重试';
+  if (endpoint === '/chat') return '暂时无法回答，请稍后重试';
+  return '操作未完成，请稍后重试';
+}
+async function request(url: string, options: RequestInit): Promise<Response> {
+  try { return await fetch(url, options); }
+  catch (error) {
+    console.error('请求连接失败:', error);
+    throw new UserMessageError('连接失败，请检查网络后重试');
+  }
+}
+
 // 通用请求函数
 async function apiRequest<T = any>(
   endpoint: string,
@@ -25,14 +43,64 @@ async function apiRequest<T = any>(
     config.body = JSON.stringify(options.body);
   }
 
-  const response = await fetch(url, config);
+  const response = await request(url, config);
   
   if (!response.ok) {
     const details = await response.json().catch(() => null);
-    throw new Error(details?.error || `API Error: ${response.status} ${response.statusText}`);
+    console.error('接口请求失败:', { endpoint, status: response.status, details });
+    throw new UserMessageError(response.status < 500 && typeof details?.error === 'string' ? details.error : requestFailure(endpoint));
   }
 
-  return response.json();
+  try { return await response.json(); }
+  catch (error) { console.error('接口响应解析失败:', error); throw new UserMessageError(requestFailure(endpoint)); }
+}
+
+export type NoteStreamEvent =
+  | { type: 'status'; message: string }
+  | { type: 'delta'; text: string }
+  | { type: 'reset' };
+interface NoteResult { success: boolean; content: string; cached: boolean }
+
+// Buffer frames across network chunks; TextDecoder preserves split UTF-8 characters.
+async function streamNote(nodeId: number, treeId: number, onEvent: (event: NoteStreamEvent) => void): Promise<NoteResult> {
+  const response = await request(API_BASE_URL + '/generate-note', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify({ nodeId, treeId }),
+  });
+  if (!response.ok) {
+    const details = await response.json().catch(() => null);
+    console.error('笔记请求失败:', { status: response.status, details });
+    throw new UserMessageError('笔记生成失败，请稍后重试');
+  }
+  if (!response.body) throw new UserMessageError('暂时无法显示笔记，请刷新页面后重试');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      let boundary;
+      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+        const frame = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        const data = frame.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+        if (!data) continue;
+        const event = JSON.parse(data);
+        if (event.type === 'error') { console.error('笔记生成失败:', event.message); throw new UserMessageError('笔记生成失败，请稍后重试'); }
+        if (event.type === 'done') return event as NoteResult;
+        if (['status', 'delta', 'reset'].includes(event.type)) onEvent(event);
+      }
+      if (done) throw new UserMessageError('笔记连接已中断，请重试');
+    }
+  } catch (error) {
+    if (error instanceof UserMessageError) throw error;
+    console.error('笔记接收失败:', error);
+    throw new UserMessageError('笔记接收中断，请重试');
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
 }
 
 // 知识树API
@@ -49,10 +117,7 @@ export const knowledgeApi = {
       method: 'POST',
       body: JSON.stringify({ treeId, nodeId, question, history }),
     }),
-  generateNote: (nodeId: number, treeId: number) =>
-    apiRequest<{ success: boolean; content: string; cached: boolean }>('/generate-note', {
-      method: 'POST', body: JSON.stringify({ nodeId, treeId }),
-    }),
+  generateNote: streamNote,
   // 创建新知识树
   createTree: (userPrompt: string, userId: number = 1) =>
     apiRequest<{
