@@ -10,7 +10,7 @@ import { BrandGraphIcon } from '../ui/BrandGraphIcon';
 import { ResizablePanelGroup } from '../ui/ResizablePanelGroup';
 import { ConversationPanel } from './ConversationPanel';
 import { NoteEditPanel } from './NoteEditPanel';
-import { LearningPath } from '../knowledge/LearningPath';
+import { NodeNoteSummary } from './NodeNoteSummary';
 
 // 按参考图设置默认比例：详情约占四分之三、提问区约占四分之一；仍可拖动调整。
 const RIGHT_PANEL_INITIAL_SIZES = [75, 25];
@@ -30,7 +30,7 @@ const NOTE_FONT_PERCENT_STEP = 10;
 const NOTE_KATEX_OPTIONS = { macros: { '\\frac': '\\dfrac' } };
 
 export const ChatPanel: React.FC = () => {
-  const { currentFocusNode, currentTree, getCurrentTreeNodes, revealNode, noteLoading, noteErrors, generateNote, updateNode } = useKnowledgeStore();
+  const { currentFocusNode, currentTree, noteLoading, noteErrors, generateNote, updateNode } = useKnowledgeStore();
   const [hasStartedConversation, setHasStartedConversation] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [noteFontPercent, setNoteFontPercent] = useState(() => {
@@ -52,7 +52,6 @@ export const ChatPanel: React.FC = () => {
   }, [noteFontPercent]);
   const focusNode = currentFocusNode();
   const tree = currentTree();
-  const treeNodes = getCurrentTreeNodes();
   // 切换知识节点时退出旧笔记的编辑状态，避免在新节点上显示旧草稿。
   useEffect(() => setEditingNoteId(null), [focusNode?.id]);
 
@@ -63,21 +62,18 @@ export const ChatPanel: React.FC = () => {
       {/* 顶部对齐：详情区也分成 56px 标题栏和节点标题区，与左、中两列的线对齐。 */}
       <div className="mt-panel-header mt-detail-header border-b flex-shrink-0 flex flex-col">
         <div className="mt-topbar h-14 px-5 border-b flex items-center gap-3">
-          <p className="mt-kicker">知识点详情</p>
+          {/* 三列顶栏统一使用蓝绿色标题样式，并将此栏名称改为“学习笔记”。 */}
+          <p className="mt-panel-title">学习笔记</p>
         </div>
-        <div className="flex-1 px-5 py-4">
-          {/* 学习路径紧邻当前节点或知识树标题，切换主题后仍在标题右侧。 */}
-          <div className="flex min-w-0 items-center gap-3">
-            {/* 右侧当前标题与中间面板主题标题使用同一字号。 */}
-            <h3 className="min-w-0 font-bold text-xl md:text-2xl tracking-tight text-[var(--mt-ink)] break-words">
-              {focusNode ? focusNode.label : (tree?.root_topic || 'AI学习助手')}
-            </h3>
-            {tree && <div className="shrink-0"><LearningPath nodes={treeNodes} onSelect={revealNode} /></div>}
-          </div>
-          {focusNode?.content && (
-            <p className="mt-muted text-xs mt-1">
-              节点内容 ({focusNode.content.length} 字符)
-            </p>
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
+          {/* 移除学习路径按钮及其展示入口，节点标题继续单独显示。 */}
+          <h3 className="min-w-0 font-bold text-xl md:text-2xl tracking-tight text-[var(--mt-ink)] break-words">
+            {focusNode ? focusNode.label : (tree?.root_topic || 'AI学习助手')}
+          </h3>
+          {/* 标题下方展示当前笔记的概括；摘要与正文版本绑定，不挤压下方笔记和对话面板。 */}
+          {focusNode && tree && (
+            <NodeNoteSummary treeId={tree.id} nodeId={focusNode.id} label={focusNode.label}
+              content={focusNode.content ?? ''} noteLoading={Boolean(noteLoading[focusNode.id])} />
           )}
         </div>
       </div>
@@ -101,7 +97,8 @@ export const ChatPanel: React.FC = () => {
           <div className="mt-detail-card h-full flex flex-col min-h-0 overflow-hidden" role="alert">
             <div className="flex-1 p-5 text-sm text-red-700 overflow-auto">
               {noteErrors[focusNode.id]}
-              <button className="mt-soft-button ml-2 px-3 py-1" onClick={() => tree && void generateNote(focusNode.id, tree.id)}>重试</button>
+              {/* 显式重生成失败后保留原笔记；重试仍沿用用户选择的强制生成模式。 */}
+              <button className="mt-soft-button ml-2 px-3 py-1" onClick={() => tree && void generateNote(focusNode.id, tree.id, Boolean(focusNode.note_generation_paused))}>重试</button>
             </div>
             {/* 自动生成失败时，左侧底栏仍保留相同的笔记编辑入口。 */}
             <div className="border-t border-[var(--mt-border)] px-5 py-2 flex items-center">

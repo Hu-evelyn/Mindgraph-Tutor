@@ -42,7 +42,8 @@ export const ThreePanelLayout: React.FC = () => {
                     ? <ChevronDoubleRightIcon className="w-4 h-4" />
                     : <ChevronDoubleLeftIcon className="w-4 h-4" />}
                 </button>
-                <span className="mt-kicker truncate">Mindgraph Tutor · 学习工作台</span>
+                {/* 中间顶栏名称改为“知识图谱”，继续共用三面板标题样式。 */}
+                <span className="mt-panel-title truncate">知识图谱</span>
               </div>
             </div>
             <KnowledgeMap />
