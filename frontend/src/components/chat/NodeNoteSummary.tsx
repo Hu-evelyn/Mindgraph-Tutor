@@ -53,20 +53,20 @@ export function NodeNoteSummary({ treeId, nodeId, label, content, noteLoading }:
   if (!content.trim() && !noteLoading) return null;
 
   return (
+    // 标题下只保留摘要正文与必要的加载、失败提示，不再显示摘要标签和字符数。
     <div className="mt-2 text-xs">
-      <p className="mt-muted">笔记摘要{content.trim() ? ` · ${content.length} 字符` : ''}</p>
       {noteLoading ? (
-        <p role="status" className="mt-muted mt-1">笔记生成后将显示摘要…</p>
+        <p role="status" className="mt-muted">笔记生成后将显示摘要…</p>
       ) : loading ? (
-        <p role="status" className="mt-muted mt-1">正在概括笔记…</p>
+        <p role="status" className="mt-muted">正在概括笔记…</p>
       ) : error ? (
-        <p role="alert" className="mt-1 text-red-600">
+        <p role="alert" className="text-red-600">
           {error}
           <button type="button" onClick={() => setRetry(value => value + 1)}
             className="ml-2 underline underline-offset-2">重试</button>
         </p>
       ) : (
-        <p className="mt-1 line-clamp-2 text-sm leading-snug text-[var(--mt-ink)]" title={summary}>{summary}</p>
+        <p className="line-clamp-2 text-sm leading-snug text-[var(--mt-ink)]" title={summary}>{summary}</p>
       )}
     </div>
   );
