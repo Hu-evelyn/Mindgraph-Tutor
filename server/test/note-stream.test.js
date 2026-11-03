@@ -1,0 +1,31 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const { createNoteJob } = require('../noteStream');
+test('late subscribers receive the current draft; reset removes rejected output; disconnect keeps generation alive', async () => {
+  let publish, finish;
+  let calls = 0;
+  const job = createNoteJob(async emit => {
+    calls++; publish = emit;
+    await new Promise(resolve => { finish = resolve; });
+    return { content: 'final' };
+  });
+  await Promise.resolve();
+  publish({ type: 'delta', text: 'old' });
+  const first = [];
+  const unsubscribe = job.subscribe(e => first.push(e));
+  assert.equal(first.at(-1).text, 'old');
+  publish({ type: 'reset' });
+  publish({ type: 'status', message: 'retry' });
+  publish({ type: 'delta', text: 'new' });
+  const late = [];
+  job.subscribe(e => late.push(e));
+  assert.deepEqual(late, [{ type: 'status', message: 'retry' }, { type: 'delta', text: 'new' }]);
+  unsubscribe();
+  const count = first.length;
+  publish({ type: 'delta', text: ' text' });
+  assert.equal(first.length, count);
+  assert.equal(late.at(-1).text, ' text');
+  finish();
+  assert.deepEqual(await job.promise, { content: 'final' });
+  assert.equal(calls, 1);
+});

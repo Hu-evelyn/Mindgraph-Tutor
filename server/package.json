@@ -12,7 +12,7 @@
     "rag:fetch": "node scripts/fetch-materials.js",
     "rag:embed": "node rag.js --embed",
     "rag:eval": "node scripts/evaluate-rag.js",
-    "test:rag": "node --test test/rag.test.js test/dataset-api.test.js test/curriculum.test.js test/note-validation.test.js test/note-plan.test.js test/note-context.test.js"
+    "test:rag": "node --test test/public-errors.test.js test/document-summary.test.js test/structured-output.test.js test/imported-documents.test.js test/import-document-api.test.js test/note-stream.test.js test/rag.test.js test/dataset-api.test.js test/curriculum.test.js test/note-validation.test.js test/note-plan.test.js test/note-context.test.js"
   },
   "keywords": [],
   "author": "",

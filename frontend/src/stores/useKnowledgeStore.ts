@@ -5,6 +5,8 @@ import { knowledgeApi} from '../services/api';
 interface KnowledgeState extends AppState {
   noteLoading: Record<number, boolean>;
   noteErrors: Record<number, string>;
+  noteDrafts: Record<number, string>;
+  noteStatuses: Record<number, string>;
   generateNote: (nodeId: number, treeId: number, force?: boolean) => Promise<void>;
   updateNode: (nodeId: number, treeId: number, changes: { label?: string; content?: string }) => Promise<void>;
   regenerateChildren: (nodeId: number, treeId: number) => Promise<void>;
@@ -39,6 +41,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   // 初始状态
   noteLoading: {},
   noteErrors: {},
+  noteDrafts: {},
+  noteStatuses: {},
   revealVersion: 0,
   trees: [],
   currentTreeId: null,
@@ -182,20 +186,46 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     // 显式重生成优先于仍在进行的自动生成，旧响应不能覆盖此次选择。
     if (force) noteEditVersions.set(editKey, (noteEditVersions.get(editKey) ?? 0) + 1);
     const editVersion = noteEditVersions.get(editKey) ?? 0;
-    set(state => ({ noteLoading: { ...state.noteLoading, [nodeId]: true }, noteErrors: { ...state.noteErrors, [nodeId]: '' } }));
+    const isCurrent = () => get().currentTreeId === treeId && selectionVersion === treeSelectionVersion &&
+      (noteEditVersions.get(editKey) ?? 0) === editVersion;
+    let draft = '';
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => {
+      timer = undefined;
+      if (isCurrent()) set(state => ({ noteDrafts: { ...state.noteDrafts, [nodeId]: draft } }));
+    };
+    set(state => ({
+      noteLoading: { ...state.noteLoading, [nodeId]: true },
+      noteErrors: { ...state.noteErrors, [nodeId]: '' },
+      noteDrafts: { ...state.noteDrafts, [nodeId]: '' },
+      noteStatuses: { ...state.noteStatuses, [nodeId]: '正在准备笔记…' },
+    }));
     try {
-      const response = await knowledgeApi.generateNote(nodeId, treeId, force);
-      if (get().currentTreeId !== treeId || selectionVersion !== treeSelectionVersion ||
-          (noteEditVersions.get(editKey) ?? 0) !== editVersion) return;
+      const response = await knowledgeApi.generateNote(nodeId, treeId, event => {
+        if (!isCurrent()) return;
+        if (event.type === 'status') set(state => ({ noteStatuses: { ...state.noteStatuses, [nodeId]: event.message } }));
+        if (event.type === 'delta') {
+          draft += event.text;
+          if (!timer) timer = setTimeout(flush, 80);
+        }
+        if (event.type === 'reset') {
+          clearTimeout(timer); timer = undefined; draft = ''; flush();
+        }
+      }, force);
+      if (!isCurrent()) return;
+      // 强制重生成成功后同步服务端清除的手工/暂停标记。
       set(state => ({ currentTreeNodes: state.currentTreeNodes.map(node => node.id === nodeId
         ? { ...node, content: response.content, ...(force && !response.cached ? { note_is_manual: 0, note_generation_paused: 0 } : {}) }
         : node) }));
     } catch (error) {
-      if (get().currentTreeId === treeId && selectionVersion === treeSelectionVersion &&
-          (noteEditVersions.get(editKey) ?? 0) === editVersion) set(state => ({ noteErrors: { ...state.noteErrors, [nodeId]: error instanceof Error ? error.message : '笔记生成失败' } }));
+      if (isCurrent()) set(state => ({ noteErrors: { ...state.noteErrors, [nodeId]: error instanceof Error ? error.message : '笔记生成失败' } }));
     } finally {
-      if (get().currentTreeId === treeId && selectionVersion === treeSelectionVersion &&
-          (noteEditVersions.get(editKey) ?? 0) === editVersion) set(state => ({ noteLoading: { ...state.noteLoading, [nodeId]: false } }));
+      clearTimeout(timer);
+      if (isCurrent()) set(state => ({
+        noteLoading: { ...state.noteLoading, [nodeId]: false },
+        noteDrafts: { ...state.noteDrafts, [nodeId]: '' },
+        noteStatuses: { ...state.noteStatuses, [nodeId]: '' },
+      }));
     }
   },
 
@@ -213,6 +243,9 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
         tree.id === treeId ? { ...tree, root_topic: response.rootTopic! } : tree),
       noteLoading: { ...state.noteLoading, [nodeId]: false },
       noteErrors: { ...state.noteErrors, [nodeId]: '' },
+      // 手工编辑使旧流失效，也清除旧流的草稿与状态提示。
+      noteDrafts: { ...state.noteDrafts, [nodeId]: '' },
+      noteStatuses: { ...state.noteStatuses, [nodeId]: '' },
     }));
     // 若保存前已有树加载请求，启动更新后的加载，让旧响应不能把刚保存的节点刷回去。
     if (activeTreeLoad?.treeId === treeId) {
@@ -241,7 +274,11 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
         ? state.currentTreeNodes.filter(node => !deletedIds.has(node.id)) : state.currentTreeNodes;
       const noteLoading = { ...state.noteLoading };
       const noteErrors = { ...state.noteErrors };
-      for (const id of deletedIds) { delete noteLoading[id]; delete noteErrors[id]; }
+      const noteDrafts = { ...state.noteDrafts };
+      const noteStatuses = { ...state.noteStatuses };
+      for (const id of deletedIds) {
+        delete noteLoading[id]; delete noteErrors[id]; delete noteDrafts[id]; delete noteStatuses[id];
+      }
       return {
         trees: response.deletedTree
           ? state.trees.filter(tree => tree.id !== treeId)
@@ -255,6 +292,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
             ? null : state.currentFocusNodeId,
           noteLoading,
           noteErrors,
+          noteDrafts,
+          noteStatuses,
         } : {}),
       };
     });
@@ -318,6 +357,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       currentTreeNodes: [],
       noteLoading: {},
       noteErrors: {},
+      noteDrafts: {},
+      noteStatuses: {},
       isLoading: treeId !== null,
     });
   },

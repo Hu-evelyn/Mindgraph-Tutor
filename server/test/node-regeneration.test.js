@@ -10,12 +10,15 @@ test('编辑节点可保留旧子树与笔记，显式重生成只替换旧子�
   // 固定模型回答，只验证“是”确实写入新笔记，且不会隐式创建子节点。
   require.cache[openaiPath].exports = { OpenAI: class {
     constructor() {
-      this.chat = { completions: { create: async ({ messages }) => ({
-        choices: [{ finish_reason: 'stop', message: { content: messages[0].content.includes('制定讲解计划并选择依据')
+      this.chat = { completions: { create: async ({ messages, stream }) => {
+        const content = messages[0].content.includes('制定讲解计划并选择依据')
           ? JSON.stringify({ focus: '解释新概念', progression: { briefRecall: [], newLearning: '认识新概念', boundary: '只解释本节点' },
             points: [{ title: '新概念', question: '是什么？', explanationGoal: '说明定义', prerequisites: [], sourceIds: [] }], exampleGoal: null })
-          : '## 1 核心定义\n\n新笔记定义。\n\n## 2 关键内容\n\n### 2.1 新概念\n\n详细解释。\n\n## 3 小结\n\n记住新概念。' } }],
-      }) } };
+          : '## 1 核心定义\n\n新笔记定义。\n\n## 2 关键内容\n\n### 2.1 新概念\n\n详细解释。\n\n## 3 小结\n\n记住新概念。';
+        // 合并后笔记接口使用流式模型响应，计划接口仍使用普通响应。
+        if (stream) return (async function* () { yield { choices: [{ delta: { content }, finish_reason: 'stop' }] }; })();
+        return { choices: [{ finish_reason: 'stop', message: { content } }] };
+      } } };
     }
   } };
   const { app, db, dbReady } = require('../index');

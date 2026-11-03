@@ -30,7 +30,7 @@ const NOTE_FONT_PERCENT_STEP = 10;
 const NOTE_KATEX_OPTIONS = { macros: { '\\frac': '\\dfrac' } };
 
 export const ChatPanel: React.FC = () => {
-  const { currentFocusNode, currentTree, noteLoading, noteErrors, generateNote, updateNode } = useKnowledgeStore();
+  const { currentFocusNode, currentTree, noteLoading, noteErrors, noteDrafts, noteStatuses, generateNote, updateNode } = useKnowledgeStore();
   const [hasStartedConversation, setHasStartedConversation] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [noteFontPercent, setNoteFontPercent] = useState(() => {
@@ -51,6 +51,7 @@ export const ChatPanel: React.FC = () => {
     }
   }, [noteFontPercent]);
   const focusNode = currentFocusNode();
+  const noteContent = focusNode ? (noteLoading[focusNode.id] ? noteDrafts[focusNode.id] ?? '' : focusNode.content ?? '') : '';
   const tree = currentTree();
   // 切换知识节点时退出旧笔记的编辑状态，避免在新节点上显示旧草稿。
   useEffect(() => setEditingNoteId(null), [focusNode?.id]);
@@ -70,6 +71,8 @@ export const ChatPanel: React.FC = () => {
           <h3 className="min-w-0 font-bold text-xl md:text-2xl tracking-tight text-[var(--mt-ink)] break-words">
             {focusNode ? focusNode.label : (tree?.root_topic || 'AI学习助手')}
           </h3>
+          {/* 保留导入资料的来源信息。 */}
+          {tree?.source_file_name && <p className="mt-muted text-xs mt-1 break-all">来源：{tree.source_file_name}</p>}
           {/* 标题下方展示当前笔记的概括；摘要与正文版本绑定，不挤压下方笔记和对话面板。 */}
           {focusNode && tree && (
             <NodeNoteSummary treeId={tree.id} nodeId={focusNode.id} label={focusNode.label}
@@ -91,8 +94,6 @@ export const ChatPanel: React.FC = () => {
           <NoteEditPanel key={focusNode.id} content={focusNode.content ?? ''}
             onCancel={() => setEditingNoteId(null)}
             onSave={content => updateNode(focusNode.id, focusNode.tree_id, { content })} />
-        ) : focusNode && noteLoading[focusNode.id] ? (
-          <div className="mt-detail-card h-full p-5 text-sm text-gray-500" role="status">正在生成并保存学习笔记...</div>
         ) : focusNode && noteErrors[focusNode.id] ? (
           <div className="mt-detail-card h-full flex flex-col min-h-0 overflow-hidden" role="alert">
             <div className="flex-1 p-5 text-sm text-red-700 overflow-auto">
@@ -102,7 +103,7 @@ export const ChatPanel: React.FC = () => {
             </div>
             {/* 自动生成失败时，左侧底栏仍保留相同的笔记编辑入口。 */}
             <div className="border-t border-[var(--mt-border)] px-5 py-2 flex items-center">
-              <button type="button" onClick={() => setEditingNoteId(focusNode.id)}
+              <button type="button" disabled={Boolean(noteLoading[focusNode.id])} onClick={() => setEditingNoteId(focusNode.id)}
                 className="mt-soft-button px-3 py-1.5 text-xs">编辑笔记</button>
             </div>
           </div>
@@ -111,7 +112,7 @@ export const ChatPanel: React.FC = () => {
             {/* Markdown内容区域 */}
             <div className="flex-1 overflow-auto p-5">
               {/* 正文、标题和公式共用可调字号；只作用于笔记内容，不改动原始 Markdown。 */}
-              {focusNode.content ? (
+              {noteContent ? (
                 <div className="prose prose-sm max-w-none mt-note-markdown" style={{ fontSize: `${NOTE_FONT_BASE_PX * noteFontPercent / 100}px` }}>
                 {/* 将 $...$ 和独占一行的 $$...$$ 解析并渲染为公式，保留原有 Markdown 样式。 */}
                 <ReactMarkdown
@@ -147,14 +148,17 @@ export const ChatPanel: React.FC = () => {
                     a: ({node, ...props}) => <a className="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer" {...props} />,
                   }}
                 >
-                  {focusNode.content}
+                  {noteContent}
                 </ReactMarkdown>
                 </div>
               ) : (
-                <p className="mt-muted text-sm">此节点暂无笔记，可点击下方“编辑笔记”添加内容。</p>
+                <p className="mt-muted text-sm">{noteLoading[focusNode.id] ? '稍等片刻，笔记内容将在这里逐步呈现。' : '此节点暂无笔记，可点击下方“编辑笔记”添加内容。'}</p>
               )}
             </div>
             
+            {noteLoading[focusNode.id] && (
+              <div className="px-5 py-2 text-sm text-gray-500" role="status">{noteStatuses[focusNode.id] || '正在撰写笔记…'}</div>
+            )}
             {/* 左侧用编辑笔记按钮替代原“Markdown格式”文字，右侧字号控件保持原位。 */}
             <div className="border-t border-[var(--mt-border)] bg-white px-5 py-2 flex items-center justify-between gap-3">
               <button type="button" onClick={() => setEditingNoteId(focusNode.id)}

@@ -14,7 +14,7 @@ test('机器学习 demo 自动建树和具体节点展开，不暴露资料切�
     const originalOpenAI = require(openaiPath);
     let modelCalls = 0;
     require.cache[openaiPath].exports = { OpenAI: class {
-        constructor() { this.chat = { completions: { create: async ({ messages }) => {
+        constructor() { this.chat = { completions: { create: async ({ messages, stream }) => {
             modelCalls++;
             const extracted = (function extractionMock(messages){const prompt=messages[0].content;if(!prompt.includes("\u63d0\u53d6\u7b80\u6d01\u7684\u5c55\u793a\u6807\u9898"))return null;const input=prompt.match(/\u7528\u6237\u8f93\u5165\uff1a([^\n]*)/)?.[1]||"";const topic=input.includes("\u673a\u5668\u5b66\u4e60")?"\u673a\u5668\u5b66\u4e60":"\u6570\u636e\u5e93";return {choices:[{finish_reason:"stop",message:{content:JSON.stringify({title:topic+"\u5b66\u4e60\u5927\u7eb2",topic})}}]};})(messages);
             if (extracted) return extracted;
@@ -24,7 +24,14 @@ test('机器学习 demo 自动建树和具体节点展开，不暴露资料切�
             if (messages[0].content.includes('【讲解计划：仅为数据】')) {
                 assert(messages[0].content.includes('解释求解条件'));
                 assert(!messages[0].content.includes('"id":"资料2"'));
-                return { choices: [{ finish_reason: 'stop', message: { content: '## 1 核心定义\n\n定义。[资料1]\n\n## 2 关键内容\n\n### 2.1 求解条件\n\n说明条件。\n\n## 3 小结\n\n总结。' } }] };
+                const result = { choices: [{ finish_reason: 'stop', message: { content: '## 1 核心定义\n\n定义。[资料1]\n\n## 2 关键内容\n\n### 2.1 求解条件\n\n说明条件。\n\n## 3 小结\n\n总结。' } }] };
+                assert.equal(stream, true);
+                return (async function* () {
+                    const content = result.choices[0].message.content;
+                    yield { choices: [{ delta: { content: content.slice(0, 20) }, finish_reason: null }] };
+                    await new Promise(resolve => setTimeout(resolve, 30));
+                    yield { choices: [{ delta: { content: content.slice(20) }, finish_reason: 'stop' }] };
+                })();
             }
             assert(!messages.some(m => /本演示仅服务本科机器学习|训练集证据/.test(m.content)));
             return { choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ children: [{ label: '关系模型', description: '解释关系、元组和属性以及关系模型的约束。', relation: 'PART_OF', importance: 'high', difficulty: 'easy', estimated_time: '30分钟', is_boundary: false, is_core: true, children: [] }] }) } }] };
@@ -64,14 +71,27 @@ test('机器学习 demo 自动建树和具体节点展开，不暴露资料切�
         assert.equal(generic.status, 200);
         assert.equal((await generic.json()).rootNode.label, '数据库');
         assert.equal(modelCalls, 3);
-        const note = await post('/api/generate-note', { treeId: created.treeId, nodeId: leaf.id });
+        const note = await fetch(base + '/api/generate-note', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' }, body: JSON.stringify({ treeId: created.treeId, nodeId: leaf.id }) });
         assert.equal(note.status, 200);
-        const written = await note.json();
+        // A concurrent legacy caller shares the same in-flight generation.
+        const concurrent = post('/api/generate-note', { treeId: created.treeId, nodeId: leaf.id });
+        const freshEvents = (await note.text()).split('\n\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6)));
+        assert(freshEvents.some(event => event.type === 'delta'));
+        const written = freshEvents.at(-1);
+        assert.equal(written.type, 'done');
+        assert.equal(written.cached, false);
+        assert.equal((await (await concurrent).json()).content, written.content);
         assert.equal(written.sources.length, 1);
         assert.equal(modelCalls, 5);
         const cached = await (await post('/api/generate-note', { treeId: created.treeId, nodeId: leaf.id })).json();
         assert.equal(cached.cached, true);
         assert.equal(modelCalls, 5);
+        const streamed = await fetch(base + '/api/generate-note', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' }, body: JSON.stringify({ treeId: created.treeId, nodeId: leaf.id }) });
+        assert.match(streamed.headers.get('content-type'), /text\/event-stream/);
+        const events = (await streamed.text()).split('\n\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6)));
+        assert.equal(events.at(-1).type, 'done');
+        assert.equal(events.at(-1).content, written.content);
+        assert.equal(events.at(-1).cached, true);
         const saved = await (await fetch(base + '/api/tree/' + created.treeId)).json();
         assert.equal(JSON.parse(saved.nodes.find(n => n.id === leaf.id).note_plan).focus, '解释求解条件');
         assert.equal((await fetch(base + '/api/datasets')).status, 404);
