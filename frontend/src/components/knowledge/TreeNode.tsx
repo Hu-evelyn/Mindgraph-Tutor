@@ -32,21 +32,10 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
   const isExpanded = node.isExpanded ?? false;
   const isFocused = node.id === currentFocusNodeId;
   const hasChildren = node.children && node.children.length > 0;
-  // 沿用 main 对齐后的虚线层级布局，并保留学习完成时的反馈。
+  // 沿用虚线层级布局；学习完成只更新右侧状态小标。
   const indent = depth * 28;
   const branchLeft = indent - 15;
   const isLastSibling = index === totalSiblings - 1;
-  const [isCelebratingLearned, setIsCelebratingLearned] = React.useState(false);
-  const previousLearned = React.useRef(Boolean(node.is_learned));
-
-  React.useEffect(() => {
-    const justLearned = Boolean(node.is_learned) && !previousLearned.current;
-    previousLearned.current = Boolean(node.is_learned);
-    if (!justLearned) return;
-    setIsCelebratingLearned(true);
-    const timeout = window.setTimeout(() => setIsCelebratingLearned(false), 850);
-    return () => window.clearTimeout(timeout);
-  }, [node.is_learned]);
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation(); // 防止触发 onNodeClick
@@ -71,8 +60,7 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
       <div
         data-node-id={node.id}
         className={`mt-node-row relative flex min-h-[40px] items-center gap-2 px-2 py-1 cursor-pointer select-none
-          ${isFocused ? 'mt-node-row-active' : ''} ${node.is_learned ? 'mt-node-row-learned' : ''}
-          ${isCelebratingLearned ? 'mt-node-row-celebrating' : ''}`}
+          ${isFocused ? 'mt-node-row-active' : ''}`}
         style={{ paddingLeft: indent }}
         onClick={handleNodeClick}
         onContextMenu={event => {

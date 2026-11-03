@@ -40,8 +40,6 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   const [contextMenu, setContextMenu] = useState<{x: number; y: number; node: TreeKnowledgeNode} | null>(null);
   const [expansionError, setExpansionError] = useState<{nodeId: number; treeId: number; message: string} | null>(null);
   const [learningError, setLearningError] = useState('');
-  const [celebratingNodeId, setCelebratingNodeId] = useState<number | null>(null);
-  const celebrationTimer = useRef<number | null>(null);
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 1000, height: 600 });
   const [isDragging, setIsDragging] = useState(false);
   const panPoint = useRef<{ x: number; y: number } | null>(null);
@@ -146,7 +144,6 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   }, [currentTreeId]);
 
   useEffect(() => () => {
-    if (celebrationTimer.current !== null) window.clearTimeout(celebrationTimer.current);
     if (wheelZoomFrame.current !== null) window.cancelAnimationFrame(wheelZoomFrame.current);
   }, []);
 
@@ -246,7 +243,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       lastRevealVersion.current = revealVersion;
     }
     if (svgRef.current) renderMindMap();
-  }, [treeNodes, currentFocusNodeId, revealVersion, celebratingNodeId]);
+  }, [treeNodes, currentFocusNodeId, revealVersion]);
 
   const calculateLayout = (rootNodes: TreeKnowledgeNode[]): NodeLayout[] => {
     const layout: NodeLayout[] = [];
@@ -467,9 +464,8 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       rect.setAttribute('fill', nodeColor);
       rect.setAttribute('stroke', isFocused ? '#1d4ed8' : MIND_MAP_BLUE);
       rect.setAttribute('stroke-width', isFocused ? '3' : borderWidth);
-      rect.setAttribute('class', node.is_learned && celebratingNodeId === node.id
-        ? 'mind-map-node mind-map-node-learning-complete'
-        : 'mind-map-node');
+      // 完成学习后节点本身不闪烁或变绿，只更新底部绿色状态圆标。
+      rect.setAttribute('class', 'mind-map-node');
 
       // 添加关系类型标识
       if (relationType !== 'PART_OF') {
@@ -626,11 +622,6 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     setLearningError('');
     try {
       await markNodeLearned(node.id, !node.is_learned);
-      if (!node.is_learned) {
-        setCelebratingNodeId(node.id);
-        if (celebrationTimer.current !== null) window.clearTimeout(celebrationTimer.current);
-        celebrationTimer.current = window.setTimeout(() => setCelebratingNodeId(null), 850);
-      }
     } catch (error) {
       setLearningError(error instanceof Error ? error.message : '更新学习状态失败，请重试');
     }

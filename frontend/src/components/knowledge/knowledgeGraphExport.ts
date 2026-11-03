@@ -116,9 +116,10 @@ export async function downloadTreePdf(tree: KnowledgeTree, nodes: DbKnowledgeNod
     context.textAlign = 'left';
     let y = contentTop;
     items.forEach((row, rowIndex) => {
-      context.fillStyle = row.node.is_learned ? '#ecfdf5' : rowIndex % 2 ? '#f8faff' : '#fff';
+      // 已学习不再把整行或标题染绿；PDF 与界面一样只保留绿色状态小标。
+      context.fillStyle = rowIndex % 2 ? '#f8faff' : '#fff';
       context.fillRect(margin, y, pageWidth - margin * 2, row.height);
-      // 导出树状视图沿用屏幕上的虚线层级、学习完成色和右侧状态徽标。
+      // 导出树状视图沿用屏幕上的虚线层级和右侧状态徽标。
       context.save();
       context.setLineDash([3, 3]);
       context.strokeStyle = '#cbd5e1';
@@ -130,7 +131,7 @@ export async function downloadTreePdf(tree: KnowledgeTree, nodes: DbKnowledgeNod
         context.stroke();
       }
       context.restore();
-      context.fillStyle = row.node.is_learned ? '#065f46' : '#20304a';
+      context.fillStyle = '#20304a';
       context.font = `${row.depth === 0 ? 'bold ' : ''}14px ${font}`;
       row.lines.forEach((text, lineIndex) => context.fillText(text, margin + row.indent, y + 17 + lineIndex * 18, pageWidth - margin * 2 - row.indent));
       context.fillStyle = row.node.is_learned ? '#d1fae5' : '#f1f5f9';

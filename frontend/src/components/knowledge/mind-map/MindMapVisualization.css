@@ -164,16 +164,6 @@
   transform: scale(1.02);
 }
 
-.mind-map-node-learning-complete {
-  animation: mind-map-learning-complete 820ms ease-out;
-}
-
-@keyframes mind-map-learning-complete {
-  0% { filter: drop-shadow(0 0 0 rgba(16, 185, 129, 0)); stroke-width: 2px; }
-  42% { filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.75)); stroke-width: 5px; }
-  100% { filter: drop-shadow(0 0 0 rgba(16, 185, 129, 0)); stroke-width: 3px; }
-}
-
 .mind-map-node-text {
   pointer-events: none;
   user-select: none;
