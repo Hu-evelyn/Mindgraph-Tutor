@@ -4,7 +4,7 @@
 }
 
 .relation-leads_to {
-  stroke: #10b981;
+  stroke: #89adf4;
 }
 
 .relation-part_of {
@@ -99,17 +99,25 @@
   border: 1px solid var(--mt-border);
   border-radius: 16px;
   box-shadow: var(--mt-shadow);
-  overflow: auto;
+  /* 固定预留横纵滚动条轨道，避免缩放时滚动条出现/消失反复改变 SVG 的测量尺寸。 */
+  overflow: scroll;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   position: relative;
   min-height: 0; /* 重要：防止内容溢出 */
   margin-top: 12px;
 }
 
+.mind-map-scroll-surface {
+  position: relative;
+  min-width: 100%;
+  min-height: 100%;
+}
+
 .mind-map-svg {
-  width: 100%;
-  height: 100%;
-  min-height: 500px;
-  min-width: 700px;
+  display: block;
+  min-height: 0;
+  min-width: 0;
   touch-action: none;
   user-select: none;
   /* 视觉统一：低对比度网格帮助观察空间位置，不修改任何节点或连线。 */
@@ -129,6 +137,12 @@
   stroke: #0ea5e9 !important;
 }
 
+/* 已学习状态优先于核心/边界概念颜色，保证学习完成后节点整体变绿。 */
+.mind-map-node-group.node-learned .mind-map-node {
+  fill: #ecfdf5 !important;
+  stroke: #10b981 !important;
+}
+
 .mind-map-node-group.importance-high .mind-map-node {
   stroke-width: 3px !important;
 }
@@ -144,6 +158,16 @@
 .mind-map-node:hover {
   filter: brightness(0.95) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
   transform: scale(1.02);
+}
+
+.mind-map-node-learning-complete {
+  animation: mind-map-learning-complete 820ms ease-out;
+}
+
+@keyframes mind-map-learning-complete {
+  0% { filter: drop-shadow(0 0 0 rgba(16, 185, 129, 0)); stroke-width: 2px; }
+  42% { filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.75)); stroke-width: 5px; }
+  100% { filter: drop-shadow(0 0 0 rgba(16, 185, 129, 0)); stroke-width: 3px; }
 }
 
 .mind-map-node-text {

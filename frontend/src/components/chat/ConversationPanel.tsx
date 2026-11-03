@@ -1,16 +1,34 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { PaperAirplaneIcon } from '@heroicons/react/24/outline';
+import { PaperAirplaneIcon, PaperClipIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { knowledgeApi } from '../../services/api';
-import { KnowledgeFileActions } from '../knowledge/KnowledgeFileActions';
-import type { TutorChatTurn } from '../../services/api';
+import { useKnowledgeStore } from '../../stores/useKnowledgeStore';
+import type { TutorChatAttachment, TutorChatTurn } from '../../services/api';
 
 interface ConversationMessage {
   id: number;
   role: 'user' | 'assistant';
   content: string;
+  attachmentName?: string;
+}
+
+async function prepareAttachment(file: File): Promise<TutorChatAttachment> {
+  if (file.size > 10 * 1024 * 1024) throw new Error('附件不能超过 10 MB');
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  if (extension === 'pdf') {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = '';
+    for (let start = 0; start < bytes.length; start += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(start, start + 0x8000));
+    }
+    return { fileName: file.name, pdfBase64: btoa(binary) };
+  }
+  if (!['txt', 'md'].includes(extension || '')) throw new Error('支持 PDF、TXT 和 Markdown 附件');
+  const content = await file.text();
+  if (!content.trim() || content.length > 50000) throw new Error('文本附件为空或超过 50000 字符');
+  return { fileName: file.name, content };
 }
 
 interface ConversationPanelProps {
@@ -29,6 +47,10 @@ export function ConversationPanel({ contextKey, contextLabel, hasSelectedNode, t
   const [draftsByContext, setDraftsByContext] = useState<Record<string, string>>({});
   const [pendingByContext, setPendingByContext] = useState<Record<string, boolean>>({});
   const [errorsByContext, setErrorsByContext] = useState<Record<string, string>>({});
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [augmentWithAttachment, setAugmentWithAttachment] = useState(false);
+  const [attachmentError, setAttachmentError] = useState('');
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const inFlightContexts = useRef(new Set<string>());
   const nextMessageId = useRef(0);
   const messageEndRef = useRef<HTMLDivElement>(null);
@@ -98,7 +120,12 @@ export function ConversationPanel({ contextKey, contextLabel, hasSelectedNode, t
       content: message.content.slice(0, 4000),
     }));
     const requestContext = contextKey;
-    const message: ConversationMessage = { id: ++nextMessageId.current, role: 'user', content };
+    const message: ConversationMessage = {
+      id: ++nextMessageId.current,
+      role: 'user',
+      content,
+      attachmentName: selectedFile?.name,
+    };
     inFlightContexts.current.add(requestContext);
     setPendingByContext(previous => ({ ...previous, [requestContext]: true }));
     setErrorsByContext(previous => ({ ...previous, [requestContext]: '' }));
@@ -108,19 +135,38 @@ export function ConversationPanel({ contextKey, contextLabel, hasSelectedNode, t
     }));
     setDraftsByContext(previous => ({ ...previous, [requestContext]: '' }));
 
-    void knowledgeApi.askTutor(treeId, nodeId, content, history)
-      .then(({ answer }) => {
+    void (async () => {
+      let attachment: TutorChatAttachment | undefined;
+      let graphNotice = '';
+      try {
+        if (selectedFile) attachment = await prepareAttachment(selectedFile);
+        if (selectedFile && augmentWithAttachment && attachment) {
+          try {
+            const result = await knowledgeApi.augmentTree(treeId, attachment);
+            if (result.addedCount > 0) {
+              await useKnowledgeStore.getState().loadTree(treeId, true);
+              graphNotice = `\n\n---\n📚 已将文件中的 ${result.addedCount} 个新知识点补充到左侧知识树。`;
+            } else {
+              graphNotice = '\n\n---\n📚 已检查文件，未发现需要补充到左侧知识树的新知识点。';
+            }
+          } catch (augmentError) {
+            graphNotice = `\n\n---\n⚠️ 左侧知识树补充失败：${augmentError instanceof Error ? augmentError.message : '请重试'}`;
+          }
+        }
+        const { answer } = await knowledgeApi.askTutor(treeId, nodeId, content, history, attachment);
         if (!answer?.trim()) throw new Error('AI 没有返回有效回复，请重试');
         setMessagesByContext(previous => ({
           ...previous,
           [requestContext]: [...(previous[requestContext] ?? []), {
             id: ++nextMessageId.current,
             role: 'assistant',
-            content: answer,
+            content: answer + graphNotice,
           }],
         }));
-      })
-      .catch(requestError => {
+        setSelectedFile(null);
+        setAugmentWithAttachment(false);
+        setAttachmentError('');
+      } catch (requestError) {
         // 发送失败时撤回本次用户气泡并恢复输入，避免重试时把失败的问题重复传入历史。
         setMessagesByContext(previous => ({
           ...previous,
@@ -131,11 +177,11 @@ export function ConversationPanel({ contextKey, contextLabel, hasSelectedNode, t
           ...previous,
           [requestContext]: requestError instanceof Error ? requestError.message : '回复失败，请重试',
         }));
-      })
-      .finally(() => {
+      } finally {
         inFlightContexts.current.delete(requestContext);
         setPendingByContext(previous => ({ ...previous, [requestContext]: false }));
-      });
+      }
+    })();
   };
 
   return (
@@ -149,7 +195,10 @@ export function ConversationPanel({ contextKey, contextLabel, hasSelectedNode, t
               message.role === 'user' ? 'mt-chat-bubble-user' : 'mt-chat-bubble-assistant'
             }`}>
               {message.role === 'user' ? (
-                <span className="whitespace-pre-wrap">{message.content}</span>
+                <>
+                  {message.attachmentName && <span className="mb-1 flex items-center gap-1 text-xs opacity-80"><PaperClipIcon className="h-3.5 w-3.5" />{message.attachmentName}</span>}
+                  <span className="whitespace-pre-wrap">{message.content}</span>
+                </>
               ) : (
                 <ReactMarkdown
                   remarkPlugins={[remarkMath]}
@@ -183,9 +232,34 @@ export function ConversationPanel({ contextKey, contextLabel, hasSelectedNode, t
           sendMessage();
         }}
       >
-        {/* 导入、提问输入和发送同排；多行输入只让输入框向上长高。 */}
+        {selectedFile && <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--mt-border)] bg-slate-50 px-3 py-2 text-xs">
+          <PaperClipIcon className="h-4 w-4 shrink-0 text-slate-500" />
+          <span className="min-w-0 flex-1 truncate" title={selectedFile.name}>{selectedFile.name}</span>
+          <span className="shrink-0 text-slate-500">{(selectedFile.size / 1024).toFixed(0)} KB</span>
+          <button type="button" aria-label="移除附件" title="移除附件" onClick={() => { setSelectedFile(null); setAugmentWithAttachment(false); }} className="rounded p-1 hover:bg-slate-200">
+            <XMarkIcon className="h-4 w-4" />
+          </button>
+          <label className="flex basis-full cursor-pointer items-center gap-2 pt-1 text-[var(--mt-ink)]">
+            <input type="checkbox" checked={augmentWithAttachment} onChange={event => setAugmentWithAttachment(event.target.checked)} />
+            同时把文件中的新增知识补充到左侧知识树
+          </label>
+        </div>}
+        {attachmentError && <p role="alert" className="mb-1 text-xs text-red-600">{attachmentError}</p>}
+        {/* 保留上传附件、预览文件卡片并带附件提问的原交互。 */}
         <div className="flex items-end gap-2 min-w-0">
-          <KnowledgeFileActions nodes={[]} mode="import" />
+          <input ref={attachmentInputRef} type="file" accept=".pdf,.txt,.md" className="sr-only" aria-label="选择对话附件"
+            onChange={event => {
+              const file = event.target.files?.[0];
+              if (file) {
+                if (file.size > 10 * 1024 * 1024) setAttachmentError('附件不能超过 10 MB');
+                else { setSelectedFile(file); setAugmentWithAttachment(false); setAttachmentError(''); }
+              }
+              event.target.value = '';
+            }} />
+          <button type="button" title="添加 PDF、TXT 或 Markdown 附件" aria-label="添加附件" disabled={isSending || treeId === null}
+            onClick={() => attachmentInputRef.current?.click()} className="mt-soft-button h-[42px] w-[42px] shrink-0 p-2">
+            <PaperClipIcon className="h-5 w-5" />
+          </button>
           <label htmlFor="tutor-chat-input" className="sr-only">输入要向 AI 提出的问题</label>
           <textarea
             ref={inputRef}

@@ -31,10 +31,21 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
   const isExpanded = node.isExpanded ?? false;
   const isFocused = node.id === currentFocusNodeId;
   const hasChildren = node.children && node.children.length > 0;
-  // 展开按钮宽 24px；节点行有 1px 边框，枝干坐标统一按外层容器计算，避免逐层偏移。
+  // 沿用 main 对齐后的虚线层级布局，并保留学习完成时的反馈。
   const indent = depth * 28;
   const branchLeft = indent - 15;
   const isLastSibling = index === totalSiblings - 1;
+  const [isCelebratingLearned, setIsCelebratingLearned] = React.useState(false);
+  const previousLearned = React.useRef(Boolean(node.is_learned));
+
+  React.useEffect(() => {
+    const justLearned = Boolean(node.is_learned) && !previousLearned.current;
+    previousLearned.current = Boolean(node.is_learned);
+    if (!justLearned) return;
+    setIsCelebratingLearned(true);
+    const timeout = window.setTimeout(() => setIsCelebratingLearned(false), 850);
+    return () => window.clearTimeout(timeout);
+  }, [node.is_learned]);
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation(); // 防止触发 onNodeClick
@@ -45,39 +56,11 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
     onNodeClick(node);
   };
 
-  // 在 TreeNode 组件中修复关系标签映射
-  const getRelationLabels = (): { [key: string]: string } => {
-    return {
-      'PREREQUISITE': '先修',
-      'LEADS_TO': '引导至', 
-      'RELATED': '相关'
-    };
-  };
-
-  // 在 getNodeMetadata 函数中使用
-  const getNodeMetadata = () => {
-    const metadata = [];
-    
-    if (node.is_core) {
-      metadata.push({ text: '核心', color: 'bg-orange-100 text-orange-800' });
-    }
-    
-    if (node.importance === 'high') {
-      metadata.push({ text: '重要', color: 'bg-red-100 text-red-800' });
-    }
-    
-    if (node.relation_type && node.relation_type !== 'PART_OF') {
-      const relationLabels = getRelationLabels();
-      metadata.push({ 
-        text: relationLabels[node.relation_type] || node.relation_type, 
-        color: 'bg-blue-100 text-blue-800' 
-      });
-    }
-    
-    return metadata;
-  };
-
-  const metadata = getNodeMetadata();
+  // 改进分支将多个元数据标签合为重点星标，避免树状视图过密。
+  const hasStarTag = Boolean(
+    node.is_core || node.importance === 'high' || node.is_boundary ||
+    (node.relation_type && node.relation_type !== 'PART_OF')
+  );
 
   return (
     <div className="relative">
@@ -90,7 +73,8 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
       <div
         data-node-id={node.id}
         className={`mt-node-row relative flex min-h-[52px] items-center gap-2 px-2 py-2 cursor-pointer select-none
-          ${isFocused ? 'mt-node-row-active' : ''}`}
+          ${isFocused ? 'mt-node-row-active' : ''} ${node.is_learned ? 'mt-node-row-learned' : ''}
+          ${isCelebratingLearned ? 'mt-node-row-celebrating' : ''}`}
         style={{ paddingLeft: indent }}
         onClick={handleNodeClick}
         onContextMenu={event => {
@@ -125,16 +109,12 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className={`truncate ${depth === 0 ? 'text-[15px] font-semibold text-[var(--mt-ink)]' : hasChildren ? 'text-sm font-medium text-slate-800' : 'text-sm font-normal text-gray-800'}`}>{node.title}</span>
-            {/* 元数据标签 */}
-            {metadata.map((meta, idx) => (
-              <span 
-                key={idx}
-                className={`text-xs px-1.5 py-0.5 rounded ${meta.color}`}
-              >
-                {meta.text}
-              </span>
-            ))}
+            <span className={`mt-node-title truncate ${depth === 0 ? 'text-[15px] font-semibold text-[var(--mt-ink)]' : hasChildren ? 'text-sm font-medium text-slate-800' : 'text-sm font-normal text-gray-800'}`}>{node.title}</span>
+            {hasStarTag && <span
+              className="ml-1 inline-flex items-center text-xs leading-none"
+              role="img"
+              aria-label="重点标记"
+            >⭐</span>}
           </div>
           {/* 难度和时间信息 */}
           {(node.difficulty || node.estimated_time) && (
@@ -149,8 +129,10 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
           aria-label={node.is_learned ? `标记${node.title}为未学习` : `标记${node.title}为已学习`}
           aria-pressed={Boolean(node.is_learned)}
           onClick={event => { event.stopPropagation(); onToggleLearned(node); }}
-          className={`w-7 h-7 flex-shrink-0 rounded-full ${node.is_learned ? 'text-emerald-600' : 'text-slate-400 hover:text-emerald-600'}`}>
-          {node.is_learned ? '✓' : '○'}
+          className={`flex-shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap transition-colors ${node.is_learned
+            ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+            : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'}`}>
+          {node.is_learned ? '✓ 已学习' : '○ 未学习'}
         </button>
       </div>
 

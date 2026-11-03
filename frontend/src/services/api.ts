@@ -7,6 +7,12 @@ export interface TutorChatTurn {
   content: string;
 }
 
+export interface TutorChatAttachment {
+  fileName: string;
+  content?: string;
+  pdfBase64?: string;
+}
+
 // Errors created here carry user-facing messages only.
 export class UserMessageError extends Error {}
 function requestFailure(endpoint: string): string {
@@ -112,10 +118,10 @@ export const knowledgeApi = {
       body: JSON.stringify(changes),
     }),
   // 节点 ID 可为空：未选节点时围绕整棵知识树提问，节点语境由后端查询。
-  askTutor: (treeId: number, nodeId: number | null, question: string, history: TutorChatTurn[]) =>
+  askTutor: (treeId: number, nodeId: number | null, question: string, history: TutorChatTurn[], attachment?: TutorChatAttachment) =>
     apiRequest<{ answer: string }>('/chat', {
       method: 'POST',
-      body: JSON.stringify({ treeId, nodeId, question, history }),
+      body: JSON.stringify({ treeId, nodeId, question, history, attachment }),
     }),
   // 流式生成也传递用户的重生成选择。
   generateNote: streamNote,
@@ -200,5 +206,9 @@ export const knowledgeApi = {
   importDocument: (payload: { fileName: string; content?: string; pdfBase64?: string }) =>
     apiRequest<{ success: boolean; treeId: number; title: string }>('/import-document', {
       method: 'POST', body: JSON.stringify(payload),
+    }),
+  augmentTree: (treeId: number, payload: { fileName: string; content?: string; pdfBase64?: string }) =>
+    apiRequest<{ success: boolean; addedCount: number }>('/augment-tree', {
+      method: 'POST', body: JSON.stringify({ treeId, ...payload }),
     }),
 };

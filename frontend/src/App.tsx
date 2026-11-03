@@ -3,13 +3,12 @@ import { useEffect } from 'react';
 import { useKnowledgeStore } from './stores/useKnowledgeStore';
 import { ThreePanelLayout } from './components/layout/ThreePanelLayout';
 import { BrandGraphIcon } from './components/ui/BrandGraphIcon';
-import { KnowledgeFileActions } from './components/knowledge/KnowledgeFileActions';
+import { NewKnowledgeTreeButton } from './components/knowledge/NewKnowledgeTreeButton';
 
 function App() {
   const { 
     currentTree, 
     isLoading, 
-    createNewTree, 
     loadUserTrees,
     trees,
     setCurrentTree,
@@ -42,29 +41,10 @@ function App() {
           </div>
           
           <div className="space-y-4">
-            <button
-              onClick={async () => {
-                const topic = window.prompt('请输入学习主题，例如：机器学习、数据库、操作系统');
-                if (topic && topic.trim()) {
-                  try {
-                    await createNewTree(topic.trim());
-                  } catch (error) {
-                    console.error('创建知识树失败:', error);
-                    alert('创建失败，请检查网络连接或稍后重试');
-                  }
-                }
-              }}
-              disabled={isLoading}
-              className="mt-primary-button w-full px-6 py-3 font-medium"
-            >
-              {isLoading ? 'AI思考中...' : '创建知识树'}
-            </button>
+            <NewKnowledgeTreeButton className="mt-primary-button w-full px-6 py-3 font-medium" />
             
             <div className="mt-muted text-xs text-center">
               例如：机器学习、数据库、操作系统、自然语言处理
-            </div>
-            <div className="flex justify-center pt-2">
-              <KnowledgeFileActions nodes={[]} />
             </div>
           </div>
         </div>
@@ -109,24 +89,11 @@ function App() {
             ))}
             
             {/* 新建知识树卡片 */}
-            <div
-              onClick={async () => {
-                const topic = window.prompt('请输入学习主题，例如：机器学习、数据库、操作系统');
-                if (topic && topic.trim()) {
-                  try {
-                    await createNewTree(topic.trim());
-                  } catch (error) {
-                    console.error('创建知识树失败:', error);
-                    alert('创建失败，请稍后重试');
-                  }
-                }
-              }}
-              className="mt-empty mt-create-card cursor-pointer p-6 flex flex-col items-center justify-center min-h-[160px]"
-            >
-              <div className="text-3xl mb-2 text-gray-400">+</div>
-              <div className="text-gray-600 font-medium">新建知识树</div>
-              <div className="text-xs text-gray-500 mt-2 text-center">输入任意学习主题</div>
-            </div>
+            <NewKnowledgeTreeButton className="mt-empty mt-create-card cursor-pointer p-6 flex flex-col items-center justify-center min-h-[160px]">
+              <span className="text-3xl mb-2 text-gray-400">+</span>
+              <span className="text-gray-600 font-medium">新建知识树</span>
+              <span className="text-xs text-gray-500 mt-2 text-center">选择主题或导入文件</span>
+            </NewKnowledgeTreeButton>
           </div>
 
           {/* 使用说明 */}
@@ -150,9 +117,6 @@ function App() {
                 <span>与AI助手对话深入学习</span>
               </div>
             </div>
-          </div>
-          <div className="mt-6 flex justify-center">
-            <KnowledgeFileActions nodes={[]} />
           </div>
         </div>
       </div>
