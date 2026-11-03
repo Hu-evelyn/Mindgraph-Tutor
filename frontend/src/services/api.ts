@@ -54,6 +54,9 @@ export const knowledgeApi = {
     apiRequest<{ success: boolean; content: string; cached: boolean }>('/generate-note', {
       method: 'POST', body: JSON.stringify({ nodeId, treeId, force }),
     }),
+  // 摘要由后端依据数据库中当前版本的笔记生成；前端不发送可伪造的正文。
+  summarizeNote: (treeId: number, nodeId: number) =>
+    apiRequest<{ summary: string; cached: boolean }>(`/tree/${treeId}/node/${nodeId}/summary`, { method: 'POST' }),
   // 服务端先规划新子节点，再在事务内替换旧子树。
   regenerateChildren: (treeId: number, nodeId: number) =>
     apiRequest<{ success: boolean }>(`/tree/${treeId}/node/${nodeId}/regenerate-children`, { method: 'POST' }),

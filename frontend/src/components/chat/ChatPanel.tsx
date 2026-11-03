@@ -10,6 +10,7 @@ import { BrandGraphIcon } from '../ui/BrandGraphIcon';
 import { ResizablePanelGroup } from '../ui/ResizablePanelGroup';
 import { ConversationPanel } from './ConversationPanel';
 import { NoteEditPanel } from './NoteEditPanel';
+import { NodeNoteSummary } from './NodeNoteSummary';
 
 // 按参考图设置默认比例：详情约占四分之三、提问区约占四分之一；仍可拖动调整。
 const RIGHT_PANEL_INITIAL_SIZES = [75, 25];
@@ -64,15 +65,15 @@ export const ChatPanel: React.FC = () => {
           {/* 三列顶栏统一使用蓝绿色标题样式，并将此栏名称改为“学习笔记”。 */}
           <p className="mt-panel-title">学习笔记</p>
         </div>
-        <div className="flex-1 px-5 py-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
           {/* 移除学习路径按钮及其展示入口，节点标题继续单独显示。 */}
           <h3 className="min-w-0 font-bold text-xl md:text-2xl tracking-tight text-[var(--mt-ink)] break-words">
             {focusNode ? focusNode.label : (tree?.root_topic || 'AI学习助手')}
           </h3>
-          {focusNode?.content && (
-            <p className="mt-muted text-xs mt-1">
-              节点内容 ({focusNode.content.length} 字符)
-            </p>
+          {/* 标题下方展示当前笔记的概括；摘要与正文版本绑定，不挤压下方笔记和对话面板。 */}
+          {focusNode && tree && (
+            <NodeNoteSummary treeId={tree.id} nodeId={focusNode.id} label={focusNode.label}
+              content={focusNode.content ?? ''} noteLoading={Boolean(noteLoading[focusNode.id])} />
           )}
         </div>
       </div>
