@@ -126,21 +126,25 @@
   background-size: 20px 20px;
 }
 
-/* 节点样式 */
-.mind-map-node-group.core-concept .mind-map-node {
-  fill: #fff7ed !important;
-  stroke: #ea580c !important;
+/* 未选中节点用浅灰蓝/浅黄；点击后加深到原有蓝/黄色。学习状态仍由圆标显示。 */
+.mind-map-node-group.node-regular .mind-map-node {
+  fill: #f0f4f8 !important;
+  stroke: #3b82f6 !important;
 }
 
-.mind-map-node-group.boundary-concept .mind-map-node {
-  fill: #f0f9ff !important;
-  stroke: #0ea5e9 !important;
+.mind-map-node-group.node-important .mind-map-node {
+  fill: #fff8e6 !important;
+  stroke: #3b82f6 !important;
 }
 
-/* 已学习状态优先于核心/边界概念颜色，保证学习完成后节点整体变绿。 */
-.mind-map-node-group.node-learned .mind-map-node {
-  fill: #ecfdf5 !important;
-  stroke: #10b981 !important;
+.mind-map-node-group.node-focused.node-regular .mind-map-node {
+  fill: #e6f0ff !important;
+  stroke: #1d4ed8 !important;
+}
+
+.mind-map-node-group.node-focused.node-important .mind-map-node {
+  fill: #fff0c2 !important;
+  stroke: #1d4ed8 !important;
 }
 
 .mind-map-node-group.importance-high .mind-map-node {

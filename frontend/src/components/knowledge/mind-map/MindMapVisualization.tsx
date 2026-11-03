@@ -21,6 +21,9 @@ interface NodeLayout extends TreeKnowledgeNode {
   height: number;
 }
 
+// 导图连接线、箭头和节点边框统一使用主题蓝色。
+const MIND_MAP_BLUE = '#3b82f6';
+
 export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({ 
   onNodeClick,
   onEditNode,
@@ -42,8 +45,8 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 1000, height: 600 });
   const [isDragging, setIsDragging] = useState(false);
   const panPoint = useRef<{ x: number; y: number } | null>(null);
-  const lastCenteredNodeId = useRef<number | null>(null);
   const lastRevealVersion = useRef(0);
+  const pendingRevealCenter = useRef(false);
   const [zoom, setZoom] = useState(1);
   const zoomRef = useRef(1);
   const zoomChangeRef = useRef<(newZoom: number, clientX?: number, clientY?: number) => void>(() => {});
@@ -121,7 +124,6 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     getCurrentTreeNodes,
     expandNode,
     markNodeLearned,
-    toggleNodeExpansion,
     revealVersion,
   } = useKnowledgeStore();
 
@@ -140,7 +142,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       viewportRef.current.scrollLeft = 0;
       viewportRef.current.scrollTop = 0;
     }
-    lastCenteredNodeId.current = null;
+    pendingRevealCenter.current = false;
   }, [currentTreeId]);
 
   useEffect(() => () => {
@@ -200,8 +202,8 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   // 放大时扩展实际 SVG 画布尺寸，从而让视口出现可拖动的上下/左右滚动条。
   // 计算缩放前鼠标所在的画布比例，缩放后调整 scrollLeft/Top，保持该位置锚定在鼠标下。
   const handleZoomChange = (newZoom: number, clientX?: number, clientY?: number) => {
-    // 保留 main 已确定的 500% 上限，同时使用新分支的滚轮锚点缩放。
-    const clampedZoom = Math.max(0.3, Math.min(5, newZoom));
+    // 缩放按钮、滑块和 Ctrl+滚轮共用 30%–800% 范围。
+    const clampedZoom = Math.max(0.3, Math.min(8, newZoom));
     if (clampedZoom === zoomRef.current) return;
     const viewport = viewportRef.current;
     const svg = svgRef.current;
@@ -239,7 +241,8 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
 
   useEffect(() => {
     if (lastRevealVersion.current !== revealVersion) {
-      lastCenteredNodeId.current = null;
+      // 只有搜索定位明确要求居中；普通点击节点保持当前画布位置与缩放。
+      pendingRevealCenter.current = true;
       lastRevealVersion.current = revealVersion;
     }
     if (svgRef.current) renderMindMap();
@@ -289,13 +292,10 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
   };
 
   
-  const handleNodeClick = async (node: TreeKnowledgeNode) => {
-    setFocusNode(node.id);
-    
-    // 单纯切换展开/收缩状态，不生成新子节点
-    toggleNodeExpansion(node.id);
-    
-    onNodeClick?.(node);
+  const handleNodeClick = (node: TreeKnowledgeNode) => {
+    // 点击只改变选中节点，不折叠子树，也不重置已调整好的视野；避免父组件重复设置焦点。
+    if (onNodeClick) onNodeClick(node);
+    else setFocusNode(node.id);
   };
 
   const drawConnections = (svg: SVGSVGElement, layout: NodeLayout[]) => {
@@ -319,7 +319,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
             const pathData = `M ${startX} ${startY} C ${controlX1} ${startY}, ${controlX2} ${endY}, ${endX} ${endY}`;
             
             line.setAttribute('d', pathData);
-            line.setAttribute('stroke', getRelationColor(relationType));
+            line.setAttribute('stroke', MIND_MAP_BLUE);
             line.setAttribute('stroke-width', '2');
             line.setAttribute('fill', 'none');
 
@@ -348,8 +348,8 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
     
     const arrowTypes = [
-      { id: 'arrow-PREREQUISITE', color: '#ef4444' },
-      { id: 'arrow-LEADS_TO', color: '#10b981' }
+      { id: 'arrow-PREREQUISITE' },
+      { id: 'arrow-LEADS_TO' }
     ];
     
     arrowTypes.forEach(arrow => {
@@ -364,7 +364,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('d', 'M0,0 L0,6 L9,3 z');
-      path.setAttribute('fill', arrow.color);
+      path.setAttribute('fill', MIND_MAP_BLUE);
       
       marker.appendChild(path);
       defs.appendChild(marker);
@@ -407,6 +407,8 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       group.classList.add(`importance-${importance}`);
       group.classList.add(node.is_learned ? 'node-learned' : 'node-unlearned');
       const hasStarTag = Boolean(isCore || isBoundary || importance === 'high' || relationType !== 'PART_OF');
+      group.classList.add(hasStarTag ? 'node-important' : 'node-regular');
+      if (isFocused) group.classList.add('node-focused');
       const nodeTitle = document.createElementNS('http://www.w3.org/2000/svg', 'title');
       nodeTitle.textContent = `${node.title} · ${node.is_learned ? '已学习' : '未学习'}`;
       group.appendChild(nodeTitle);
@@ -445,23 +447,10 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
         });
       }
 
-      //// 根据节点属性设置颜色
-      let nodeColor = 'white';
-      let borderColor = '#cbd5e1';
-      
-      if (node.is_learned) {
-        nodeColor = '#ecfdf5';
-        borderColor = '#10b981';
-      } else if (isCore) {
-        nodeColor = '#fff7ed'; // 核心概念橙色系
-        borderColor = '#ea580c';
-      } else if (isBoundary) {
-        nodeColor = '#f0f9ff'; // 边界知识点蓝色系
-        borderColor = '#0ea5e9';
-      } else {
-        nodeColor = '#f8fafc';
-        borderColor = '#94a3b8';
-      }
+      // 未选中时用浅黄/灰蓝；选中后恢复原来的黄/蓝，方便看出当前节点。
+      const nodeColor = hasStarTag
+        ? (isFocused ? '#fff0c2' : '#fff8e6')
+        : (isFocused ? '#e6f0ff' : '#f0f4f8');
       
       // 根据重要性设置边框粗细
       const borderWidth = importance === 'high' ? '3' : importance === 'medium' ? '2' : '1';
@@ -471,8 +460,8 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       rect.setAttribute('width', node.width.toString());
       rect.setAttribute('height', node.height.toString());
       rect.setAttribute('rx', '8');
-      rect.setAttribute('fill', isFocused && !node.is_learned ? '#3b82f6' : nodeColor);
-      rect.setAttribute('stroke', isFocused ? '#1d4ed8' : borderColor);
+      rect.setAttribute('fill', nodeColor);
+      rect.setAttribute('stroke', isFocused ? '#1d4ed8' : MIND_MAP_BLUE);
       rect.setAttribute('stroke-width', isFocused ? '3' : borderWidth);
       rect.setAttribute('class', node.is_learned && celebratingNodeId === node.id
         ? 'mind-map-node mind-map-node-learning-complete'
@@ -484,7 +473,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
         relationIndicator.setAttribute('cx', '10');
         relationIndicator.setAttribute('cy', '10');
         relationIndicator.setAttribute('r', '4');
-        relationIndicator.setAttribute('fill', getRelationColor(relationType));
+        relationIndicator.setAttribute('fill', MIND_MAP_BLUE);
         group.appendChild(relationIndicator);
       }
       
@@ -493,7 +482,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       titleText.setAttribute('x', (node.width / 2).toString());
       titleText.setAttribute('y', '22');
       titleText.setAttribute('text-anchor', 'middle');
-      titleText.setAttribute('fill', isFocused && !node.is_learned ? 'white' : '#334155');
+      titleText.setAttribute('fill', '#24334f');
       titleText.setAttribute('font-size', '12');
       titleText.setAttribute('font-weight', '600');
       titleText.setAttribute('pointer-events', 'none');
@@ -512,14 +501,14 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
         titleText.appendChild(span);
       });
 
-      // 节点元数据（难度、时间）
+      // 只展示学习状态与重点星标，隐藏难度文字。
       const metaText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       metaText.setAttribute('x', (node.width / 2).toString());
       metaText.setAttribute('y', (node.height - 12).toString());
       metaText.setAttribute('text-anchor', 'middle');
-      metaText.setAttribute('fill', isFocused && !node.is_learned ? 'white' : '#6b7280');
+      metaText.setAttribute('fill', '#64748b');
       metaText.setAttribute('font-size', '10');
-      metaText.textContent = `难度：${node.difficulty || '未设置'} · ${node.is_learned ? '已学习' : '未学习'}${hasStarTag ? ' · ⭐' : ''}`;
+      metaText.textContent = `${node.is_learned ? '已学习' : '未学习'}${hasStarTag ? ' · ⭐' : ''}`;
       
       group.appendChild(rect);
       group.appendChild(titleText);
@@ -583,14 +572,14 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     const isInitialView = viewBox.width === 1000 && viewBox.height === 600;
     const focusedNode = layout.find(node => node.id === currentFocusNodeId);
     if (isInitialView) setViewBox(optimalViewBox);
-    if (focusedNode && lastCenteredNodeId.current !== focusedNode.id) {
+    if (focusedNode && pendingRevealCenter.current) {
       const base = isInitialView ? optimalViewBox : viewBox;
       setViewBox({
         ...base,
         x: focusedNode.x + focusedNode.width / 2 - base.width / 2,
         y: focusedNode.y + focusedNode.height / 2 - base.height / 2,
       });
-      lastCenteredNodeId.current = focusedNode.id;
+      pendingRevealCenter.current = false;
     }
     
     drawConnections(svg, layout);
@@ -632,18 +621,6 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       setLearningError(error instanceof Error ? error.message : '更新学习状态失败，请重试');
     }
   };
-  // 辅助函数：根据关系类型获取颜色
-  // 替换原来的 getRelationColor 函数
-  function getRelationColor(relationType: string): string {
-    const colors: Record<string, string> = {
-      'PREREQUISITE': '#ef4444', // 红色-先修
-      'LEADS_TO': '#10b981',     // 绿色-引导至
-      'PART_OF': '#3b82f6',      // 蓝色-属于
-      'RELATED': '#8b5cf6'       // 紫色-相关
-    };
-    return colors[relationType] || '#6b7280';
-  }
-
   // 重置视图
   const resetView = () => {
     const rootNodes = buildTreeStructure(treeNodes);
@@ -722,7 +699,7 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
               <input
                 type="range"
                 min="30"
-                max="500"
+                max="800"
                 value={zoom * 100}
                 onChange={(e) => handleZoomChange(parseInt(e.target.value) / 100)}
                 className="w-24 accent-[var(--mt-accent)]"
@@ -770,11 +747,6 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
           }}
         />
       </div>
-    </div>
-
-    {/* 操作提示 */}
-    <div className="p-2 text-xs text-gray-500 text-center">
-      提示: 拖动可移动视图 • 按住 Ctrl 并滚动可缩放，也可使用缩放按钮
     </div>
 
     {/* 右键菜单 */}

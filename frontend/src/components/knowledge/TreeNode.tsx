@@ -68,11 +68,11 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
       {depth > 0 && !isLastSibling && (
         <span aria-hidden="true" className="mt-tree-branch-line" style={{ left: branchLeft }} />
       )}
-      {/* 节点行沿用悬停与选中样式，统一缩进后用字重区分父节点和叶子节点。 */}
+      {/* 缩小节点行高和上下内边距，让树的层级更紧凑，保持原有选中与学习状态样式。 */}
       {/* 树状视图右键节点打开与思维导图相同的操作菜单，不改变当前笔记焦点。 */}
       <div
         data-node-id={node.id}
-        className={`mt-node-row relative flex min-h-[52px] items-center gap-2 px-2 py-2 cursor-pointer select-none
+        className={`mt-node-row relative flex min-h-[40px] items-center gap-2 px-2 py-1 cursor-pointer select-none
           ${isFocused ? 'mt-node-row-active' : ''} ${node.is_learned ? 'mt-node-row-learned' : ''}
           ${isCelebratingLearned ? 'mt-node-row-celebrating' : ''}`}
         style={{ paddingLeft: indent }}
@@ -116,13 +116,7 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
               aria-label="重点标记"
             >⭐</span>}
           </div>
-          {/* 难度和时间信息 */}
-          {(node.difficulty || node.estimated_time) && (
-            <div className="text-xs text-gray-500">
-              {node.difficulty && <span>难度: {node.difficulty}</span>}
-              {node.estimated_time && <span> </span>}
-            </div>
-          )}
+          {/* 树状视图只展示节点名称与重点标记，难度仍保留在数据中供其他逻辑使用。 */}
         </div>
         {/* 学习状态仍可直接标记；节点编辑已移至右键菜单。 */}
         <button type="button" title={node.is_learned ? '标记为未学习' : '标记为已学习'}

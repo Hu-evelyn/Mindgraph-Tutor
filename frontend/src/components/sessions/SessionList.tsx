@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useKnowledgeStore } from '../../stores/useKnowledgeStore';
-import { ArrowLeftIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, ClockIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { NewKnowledgeTreeButton } from '../knowledge/NewKnowledgeTreeButton';
 
 interface SessionListProps {
@@ -110,12 +110,9 @@ export const SessionList: React.FC<SessionListProps> = ({ onBackToLibrary }) => 
                   {tree.root_topic}
                 </h3>
                 <div className="text-xs text-gray-500 space-y-1">
+                  {/* 卡片不再显示节点数量；用钟表图标标识创建日期。 */}
                   <div className="flex items-center gap-1">
-                    <span>📊</span>
-                    <span>{tree.node_count || 0} 个节点</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span>📅</span>
+                    <ClockIcon className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>{new Date(tree.created_at).toLocaleDateString()}</span>
                   </div>
                 </div>

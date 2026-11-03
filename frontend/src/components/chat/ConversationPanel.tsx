@@ -38,10 +38,11 @@ interface ConversationPanelProps {
   treeId: number | null;
   nodeId: number | null;
   onConversationStart: () => void;
+  onAttachmentChange: (hasAttachment: boolean) => void;
 }
 
 // 右侧对话卡片：沿用节点详情的圆角、边框和左右对齐方式。
-export function ConversationPanel({ contextKey, contextLabel, hasSelectedNode, treeId, nodeId, onConversationStart }: ConversationPanelProps) {
+export function ConversationPanel({ contextKey, contextLabel, hasSelectedNode, treeId, nodeId, onConversationStart, onAttachmentChange }: ConversationPanelProps) {
   const [messagesByContext, setMessagesByContext] = useState<Record<string, ConversationMessage[]>>({});
   // 每棵树/每个节点独立保存消息、输入草稿和请求状态；切换节点不会串话。
   const [draftsByContext, setDraftsByContext] = useState<Record<string, string>>({});
@@ -62,6 +63,9 @@ export function ConversationPanel({ contextKey, contextLabel, hasSelectedNode, t
   const draft = draftsByContext[contextKey] ?? '';
   const isSending = pendingByContext[contextKey] ?? false;
   const error = errorsByContext[contextKey];
+
+  // 附件预览出现时通知外层扩大对话卡片，避免输入框和发送按钮被底部裁切。
+  useEffect(() => onAttachmentChange(Boolean(selectedFile)), [selectedFile, onAttachmentChange]);
 
   // 按真实内容测量高度，并从卡片高度中扣除固定操作行；输入框增长只占用上方消息区。
   const resizeInput = useCallback(() => {
