@@ -253,10 +253,11 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
     const nodeWidth = 230;
     const horizontalSpacing = 145;
     const verticalSpacing = 28;
-    const lineCapacity = 16;
+    // 标题放大后缩短每行字数，为右侧星标留出空间。
+    const lineCapacity = 11;
     const nodeHeight = (node: TreeKnowledgeNode) => {
       const lines = Math.max(1, Math.ceil(Array.from(node.title || '').length / lineCapacity));
-      return Math.max(72, 42 + lines * 18);
+      return Math.max(72, 46 + lines * 18);
     };
     const childrenOf = (node: TreeKnowledgeNode) =>
       node.isExpanded ? (node.children ?? []) : [];
@@ -416,19 +417,22 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
       const learnedBadge = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       {
         const badge = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        badge.setAttribute('cx', (node.width - 15).toString());
-        badge.setAttribute('cy', '15');
-        badge.setAttribute('r', '8');
+        // 学习状态圆标移到节点底部文字左侧，仍可单独点击切换状态。
+        badge.setAttribute('cx', (node.width / 2 - 19).toString());
+        // 状态行略向下移并缩小圆标，让标题和“未学习/已学习”之间多一点呼吸空间。
+        badge.setAttribute('cy', (node.height - 17).toString());
+        badge.setAttribute('r', '5.5');
         badge.setAttribute('fill', node.is_learned ? '#059669' : '#fff7ed');
         badge.setAttribute('stroke', node.is_learned ? '#059669' : '#f59e0b');
         badge.setAttribute('stroke-width', '1.5');
         const check = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        check.setAttribute('x', (node.width - 15).toString());
-        check.setAttribute('y', '19');
+        check.setAttribute('x', (node.width / 2 - 19).toString());
+        check.setAttribute('y', (node.height - 13).toString());
         check.setAttribute('text-anchor', 'middle');
         check.setAttribute('fill', node.is_learned ? 'white' : '#b45309');
-        check.setAttribute('font-size', '12');
-        check.textContent = node.is_learned ? '✓' : '○';
+        check.setAttribute('font-size', '9');
+        // 未学习只保留外层圆形轮廓，避免在圆内再画“○”形成双圆。
+        check.textContent = node.is_learned ? '✓' : '';
         learnedBadge.append(badge);
         learnedBadge.appendChild(check);
         // 右键菜单继续提供编辑、展开、删除；状态圆标可直接切换学习状态。
@@ -477,43 +481,53 @@ export const MindMapVisualization: React.FC<MindMapVisualizationProps> = ({
         group.appendChild(relationIndicator);
       }
       
-      // 节点标题 - 添加元数据信息
+      // 标题与状态行靠近，重点星标单独放在节点右侧。
       const titleText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       titleText.setAttribute('x', (node.width / 2).toString());
-      titleText.setAttribute('y', '22');
       titleText.setAttribute('text-anchor', 'middle');
       titleText.setAttribute('fill', '#24334f');
-      titleText.setAttribute('font-size', '12');
+      titleText.setAttribute('font-size', '15');
       titleText.setAttribute('font-weight', '600');
       titleText.setAttribute('pointer-events', 'none');
       const titleChars = Array.from(node.title || '');
       const titleLines = titleChars.reduce<string[]>((lines, character) => {
         const last = lines[lines.length - 1];
-        if (!last || Array.from(last).length >= 16) lines.push(character);
+        if (!last || Array.from(last).length >= 11) lines.push(character);
         else lines[lines.length - 1] = last + character;
         return lines;
       }, []);
+      // 标题整体上移 3px，底部学习状态的位置保持不变。
+      titleText.setAttribute('y', (node.height - 40 - (titleLines.length - 1) * 18).toString());
       titleLines.forEach((line, index) => {
         const span = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
         span.setAttribute('x', (node.width / 2).toString());
-        span.setAttribute('dy', index === 0 ? '0' : '16');
+        span.setAttribute('dy', index === 0 ? '0' : '18');
         span.textContent = line;
         titleText.appendChild(span);
       });
 
-      // 只展示学习状态与重点星标，隐藏难度文字。
+      const starText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      starText.setAttribute('x', (node.width - 18).toString());
+      starText.setAttribute('y', (node.height / 2 + 5).toString());
+      starText.setAttribute('text-anchor', 'middle');
+      starText.setAttribute('font-size', '16');
+      starText.setAttribute('pointer-events', 'none');
+      starText.textContent = '⭐';
+
+      // 底部状态文字与圆标同属一个可点击区域，操作方式与树状视图一致。
       const metaText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      metaText.setAttribute('x', (node.width / 2).toString());
-      metaText.setAttribute('y', (node.height - 12).toString());
-      metaText.setAttribute('text-anchor', 'middle');
-      metaText.setAttribute('fill', '#64748b');
-      metaText.setAttribute('font-size', '10');
-      metaText.textContent = `${node.is_learned ? '已学习' : '未学习'}${hasStarTag ? ' · ⭐' : ''}`;
+      metaText.setAttribute('x', (node.width / 2 - 8).toString());
+      metaText.setAttribute('y', (node.height - 13).toString());
+      metaText.setAttribute('text-anchor', 'start');
+      metaText.setAttribute('fill', node.is_learned ? '#047857' : '#64748b');
+      metaText.setAttribute('font-size', '13');
+      metaText.textContent = node.is_learned ? '已学习' : '未学习';
+      learnedBadge.appendChild(metaText);
       
       group.appendChild(rect);
       group.appendChild(titleText);
-      group.appendChild(metaText);
-      // SVG 后绘制的元素在上层，状态圆标需盖在节点背景上才能点击。
+      if (hasStarTag) group.appendChild(starText);
+      // SVG 后绘制的元素在上层，状态圆标和文字需盖在节点背景上才能点击。
       group.appendChild(learnedBadge);
       svg.appendChild(group);
       

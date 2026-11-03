@@ -171,10 +171,10 @@ export function downloadMindmapSvg(tree: KnowledgeTree, nodes: DbKnowledgeNode[]
   const wrap = (value: string) => {
     const chars = Array.from(value || '未命名节点');
     const lines: string[] = [];
-    while (chars.length) lines.push(chars.splice(0, 16).join(''));
+    while (chars.length) lines.push(chars.splice(0, 11).join(''));
     return lines;
   };
-  const nodeHeight = (lines: string[]) => Math.max(72, 42 + lines.length * 18);
+  const nodeHeight = (lines: string[]) => Math.max(72, 46 + lines.length * 18);
   const subtreeHeight = (node: (typeof roots)[number]): number => {
     const children = node.children ?? [];
     if (!children.length) return nodeHeight(wrap(node.title));
@@ -214,17 +214,23 @@ export function downloadMindmapSvg(tree: KnowledgeTree, nodes: DbKnowledgeNode[]
   const cards = layouts.map(item => {
     const node = item.node;
     const hasStar = hasKnowledgeNodeStar(node);
-    const title = item.lines.map((line, index) => `<tspan x="${nodeWidth / 2}" dy="${index ? 16 : 0}">${escapeXml(line)}</tspan>`).join('');
-    const metadata = `${node.is_learned ? '已学习' : '未学习'}${hasStar ? ' · ⭐' : ''}`;
+    const title = item.lines.map((line, index) => `<tspan x="${nodeWidth / 2}" dy="${index ? 18 : 0}">${escapeXml(line)}</tspan>`).join('');
+    const status = node.is_learned ? '已学习' : '未学习';
     const fill = hasStar ? '#fff8e6' : '#f0f4f8';
     const borderWidth = node.importance === 'high' ? 3 : node.importance === 'medium' ? 2 : 1;
     const badgeFill = node.is_learned ? '#059669' : '#fff7ed';
     const badgeStroke = node.is_learned ? '#059669' : '#f59e0b';
-    const badgeText = node.is_learned ? '✓' : '○';
+    // 导出与界面一致：未学习只画一个圆，不再叠加圆形字符。
+    const badgeText = node.is_learned ? '✓' : '';
+    const badgeX = nodeWidth / 2 - 19;
+    const statusY = item.height - 13;
+    const star = hasStar
+      ? `<text x="${nodeWidth - 18}" y="${item.height / 2 + 5}" text-anchor="middle" font-family="Microsoft YaHei, SimSun, sans-serif" font-size="16">⭐</text>`
+      : '';
     const relationDot = node.relation_type && node.relation_type !== 'PART_OF'
       ? '<circle cx="10" cy="10" r="4" fill="#3b82f6"/>' : '';
-    // 与当前导图一致：节点底色由星标决定，学习状态用右上角圆标及底部文字表示。
-    return `<g transform="translate(${item.x} ${item.y})"><rect width="${nodeWidth}" height="${item.height}" rx="8" fill="${fill}" stroke="#3b82f6" stroke-width="${borderWidth}"/>${relationDot}<text x="${nodeWidth / 2}" y="22" text-anchor="middle" font-family="Microsoft YaHei, SimSun, sans-serif" font-size="12" font-weight="600" fill="#24334f">${title}</text><text x="${nodeWidth / 2}" y="${item.height - 12}" text-anchor="middle" font-family="Microsoft YaHei, SimSun, sans-serif" font-size="10" fill="#64748b">${escapeXml(metadata)}</text><circle cx="${nodeWidth - 15}" cy="15" r="8" fill="${badgeFill}" stroke="${badgeStroke}" stroke-width="1.5"/><text x="${nodeWidth - 15}" y="19" text-anchor="middle" font-family="Microsoft YaHei, SimSun, sans-serif" font-size="12" fill="${node.is_learned ? '#fff' : '#b45309'}">${badgeText}</text></g>`;
+    // 与屏幕导图同步：稍小的圆标、更大的状态文字及更宽松的标题间距。
+    return `<g transform="translate(${item.x} ${item.y})"><rect width="${nodeWidth}" height="${item.height}" rx="8" fill="${fill}" stroke="#3b82f6" stroke-width="${borderWidth}"/>${relationDot}<text x="${nodeWidth / 2}" y="${item.height - 40 - (item.lines.length - 1) * 18}" text-anchor="middle" font-family="Microsoft YaHei, SimSun, sans-serif" font-size="15" font-weight="600" fill="#24334f">${title}</text>${star}<circle cx="${badgeX}" cy="${item.height - 17}" r="5.5" fill="${badgeFill}" stroke="${badgeStroke}" stroke-width="1.5"/><text x="${badgeX}" y="${statusY}" text-anchor="middle" font-family="Microsoft YaHei, SimSun, sans-serif" font-size="9" fill="${node.is_learned ? '#fff' : '#b45309'}">${badgeText}</text><text x="${nodeWidth / 2 - 8}" y="${statusY}" text-anchor="start" font-family="Microsoft YaHei, SimSun, sans-serif" font-size="13" fill="${node.is_learned ? '#047857' : '#64748b'}">${status}</text></g>`;
   }).join('');
   const title = escapeXml(tree.root_topic || '知识图谱');
   // 导出画布统一为纯白，避免 SVG 边界内外出现浅蓝与白色的分界。
