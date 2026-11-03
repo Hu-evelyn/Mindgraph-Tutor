@@ -16,6 +16,8 @@ import { NodeNoteSummary } from './NodeNoteSummary';
 const RIGHT_PANEL_INITIAL_SIZES = [75, 25];
 // 首次提问后为回答留出更多空间；只扩大到至少 40%，之后仍可手动拖动分界。
 const CHAT_EXPANDED_PERCENT = 40;
+// 选中附件后预览卡片会占用输入区高度，自动给对话面板留出完整的表单空间。
+const CHAT_ATTACHMENT_EXPANDED_PERCENT = 45;
 
 // 笔记以 15px 为 100%，每次调整 10%，范围 20%–300%；百分比单独存储以免误读旧的 px 设置。
 const NOTE_FONT_BASE_PX = 15;
@@ -32,6 +34,7 @@ const NOTE_KATEX_OPTIONS = { macros: { '\\frac': '\\dfrac' } };
 export const ChatPanel: React.FC = () => {
   const { currentFocusNode, currentTree, noteLoading, noteErrors, noteDrafts, noteStatuses, generateNote, updateNode } = useKnowledgeStore();
   const [hasStartedConversation, setHasStartedConversation] = useState(false);
+  const [hasChatAttachment, setHasChatAttachment] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [noteFontPercent, setNoteFontPercent] = useState(() => {
     try {
@@ -85,7 +88,7 @@ export const ChatPanel: React.FC = () => {
       <ResizablePanelGroup
         direction="vertical"
         initialSizes={RIGHT_PANEL_INITIAL_SIZES}
-        expandLastPanelTo={hasStartedConversation ? CHAT_EXPANDED_PERCENT : undefined}
+        expandLastPanelTo={hasChatAttachment ? CHAT_ATTACHMENT_EXPANDED_PERCENT : hasStartedConversation ? CHAT_EXPANDED_PERCENT : undefined}
         hideDivider
         className="flex-1 min-h-0 bg-[var(--mt-canvas)]"
       >
@@ -209,6 +212,7 @@ export const ChatPanel: React.FC = () => {
           treeId={tree?.id ?? null}
           nodeId={focusNode?.id ?? null}
           onConversationStart={() => setHasStartedConversation(true)}
+          onAttachmentChange={setHasChatAttachment}
         />
       </div>
       </ResizablePanelGroup>

@@ -12,6 +12,7 @@ import type { TreeKnowledgeNode } from '../../types';
 
 export const KnowledgeMap: React.FC = () => {
   const [currentView, setCurrentView] = useState<KnowledgeViewMode>('tree');
+  const [hasOpenedMindMap, setHasOpenedMindMap] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<number | null>(null);
   const [deletingNodeId, setDeletingNodeId] = useState<number | null>(null);
   
@@ -33,6 +34,12 @@ export const KnowledgeMap: React.FC = () => {
   const editingNode = treeNodes.find(node => node.id === editingNodeId);
   const learnedCount = treeNodes.filter(node => node.is_learned).length;
   const progress = treeNodes.length ? Math.round(learnedCount / treeNodes.length * 100) : 0;
+
+  const handleViewChange = (view: KnowledgeViewMode) => {
+    // 导图首次打开后保持挂载；切回树状视图时保留缩放比例、视野与滚动位置。
+    if (view === 'mindmap') setHasOpenedMindMap(true);
+    setCurrentView(view);
+  };
 
   // 切换知识树时关闭旧节点的编辑框，避免误把内容保存到新的学习主题。
   useEffect(() => { setEditingNodeId(null); setDeletingNodeId(null); }, [currentTreeId]);
@@ -80,7 +87,7 @@ export const KnowledgeMap: React.FC = () => {
     <div className="flex w-full min-w-0 items-center gap-3">
       <KnowledgeNodeSearch key={tree.id} nodes={treeNodes} onSelect={revealNode} />
       <div className="shrink-0">
-        <KnowledgeViewSwitcher currentView={currentView} onViewChange={setCurrentView} />
+        <KnowledgeViewSwitcher currentView={currentView} onViewChange={handleViewChange} />
       </div>
       <div className="ml-auto shrink-0">
         <KnowledgeFileActions tree={tree} nodes={treeNodes} mode="export" />
@@ -88,27 +95,25 @@ export const KnowledgeMap: React.FC = () => {
     </div>
   ) : null;
 
-  const renderCurrentView = () => {
-    console.log(`渲染 ${currentView} 视图，节点数量: ${treeNodes.length}`);
-    
-    switch (currentView) {
-      case 'tree':
-        return <KnowledgeTree onNodeClick={handleNodeClick} onEditNode={setEditingNodeId}
-          onDeleteNode={setDeletingNodeId} toolbar={viewToolbar} />;
-      
-      case 'mindmap':
-        return (
-          <div className="flex-1 min-h-0 min-w-0 flex flex-col">
-            <MindMapVisualization onNodeClick={handleNodeClick} onEditNode={setEditingNodeId}
-              onDeleteNode={setDeletingNodeId} toolbar={viewToolbar} />
-          </div>
-        );
-      
-      default:
-        return <KnowledgeTree onNodeClick={handleNodeClick} onEditNode={setEditingNodeId}
-          onDeleteNode={setDeletingNodeId} toolbar={viewToolbar} />;
-    }
-  };
+  const renderCurrentView = () => (
+    <div className="relative flex-1 min-h-0 min-w-0">
+      <div aria-hidden={currentView !== 'tree'}
+        className={`absolute inset-0 flex min-h-0 min-w-0 flex-col ${currentView === 'tree' ? '' : 'pointer-events-none'}`}
+        // 隐藏未激活视图的整层画面，避免 SVG 连线透到树状视图；继续挂载以保留滚动位置。
+        style={{ visibility: currentView === 'tree' ? 'visible' : 'hidden', opacity: currentView === 'tree' ? 1 : 0 }}>
+        <KnowledgeTree onNodeClick={handleNodeClick} onEditNode={setEditingNodeId}
+          onDeleteNode={setDeletingNodeId} toolbar={viewToolbar} />
+      </div>
+      {hasOpenedMindMap && (
+        <div aria-hidden={currentView !== 'mindmap'}
+          className={`absolute inset-0 flex min-h-0 min-w-0 flex-col ${currentView === 'mindmap' ? '' : 'pointer-events-none'}`}
+          style={{ visibility: currentView === 'mindmap' ? 'visible' : 'hidden', opacity: currentView === 'mindmap' ? 1 : 0 }}>
+          <MindMapVisualization onNodeClick={handleNodeClick} onEditNode={setEditingNodeId}
+            onDeleteNode={setDeletingNodeId} toolbar={viewToolbar} />
+        </div>
+      )}
+    </div>
+  );
 
   if (!tree) {
     return (

@@ -63,7 +63,8 @@ function App() {
             <BrandGraphIcon className="mx-auto mb-5" />
             {/* 入口页标题：统一使用产品名称。 */}
             <h1 className="text-4xl font-bold text-[var(--mt-ink)] mb-2">我的MindGraph-Tutor</h1>
-            <p className="mt-muted">选择知识树继续学习</p>
+            {/* 首页引导语同时说明可选择已有知识树或创建新知识树。 */}
+            <p className="mt-muted">选择/创建知识树开始学习</p>
           </div>
 
           {/* 知识树网格列表 */}
@@ -96,28 +97,6 @@ function App() {
             </NewKnowledgeTreeButton>
           </div>
 
-          {/* 使用说明 */}
-          <div className="mt-surface p-6 max-w-2xl mx-auto">
-            <h3 className="font-semibold text-lg mb-3">使用说明</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mt-muted">
-              <div className="flex items-start">
-                <span className="text-blue-500 mr-2">•</span>
-                <span>选择知识树进入学习界面</span>
-              </div>
-              <div className="flex items-start">
-                <span className="text-blue-500 mr-2">•</span>
-                <span>在树状视图和思维导图间切换</span>
-              </div>
-              <div className="flex items-start">
-                <span className="text-blue-500 mr-2">•</span>
-                <span>点击节点展开更多内容</span>
-              </div>
-              <div className="flex items-start">
-                <span className="text-blue-500 mr-2">•</span>
-                <span>与AI助手对话深入学习</span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     );
