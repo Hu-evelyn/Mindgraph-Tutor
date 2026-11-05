@@ -65,6 +65,20 @@ body {
   box-sizing: border-box;
 }
 
+/* 新建方式菜单从固定高度的侧栏标题区浮出时，始终盖在知识树列表上方。 */
+.mt-sidebar-header {
+  position: relative;
+  z-index: 30;
+}
+
+.mt-sidebar-header .mt-new-tree-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  margin-top: 0;
+}
+
 .mt-main-header {
   height: 132px;
   box-sizing: border-box;

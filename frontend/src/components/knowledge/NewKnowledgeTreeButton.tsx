@@ -26,11 +26,12 @@ export function NewKnowledgeTreeButton({
   };
 
   return (
-    <div className="w-full">
+    <div className="relative w-full">
       <button type="button" disabled={isLoading} onClick={() => setIsOpen(open => !open)} className={className}>
         {isLoading ? '创建中…' : children}
       </button>
-      {isOpen && <div className="mt-surface mt-2 flex flex-col gap-2 p-3" aria-label="选择知识树创建方式">
+      {/* 侧栏中由样式定位为浮层，避免被下方知识树卡片覆盖；首页仍沿用原来的展开布局。 */}
+      {isOpen && <div className="mt-new-tree-menu mt-surface mt-2 flex flex-col gap-2 p-3" aria-label="选择知识树创建方式">
         <p className="text-sm font-medium text-[var(--mt-ink)]">选择新建方式</p>
         <button type="button" disabled={isLoading} onClick={() => void createFromTopic()} className="mt-soft-button w-full px-3 py-2 text-sm">
           通过学习主题生成
